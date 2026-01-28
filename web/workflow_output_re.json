@@ -1,0 +1,355 @@
+{
+  "nodes": [
+    {
+      "nodeId": "userGuide",
+      "flowNodeType": "userGuide",
+      "name": "系统配置",
+      "avatar": "/gpt-agent/imgs/workflow/systemConfig.png",
+      "version": "481",
+      "intro": "可以配置应用的系统参数",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "nodeId": "zUmqwi6UQfjM",
+      "flowNodeType": "workflowStart",
+      "name": "流程开始",
+      "avatar": "/gpt-agent/imgs/workflow/userChatInput.svg",
+      "version": "481",
+      "intro": "工作流起点，请从此连线",
+      "position": {
+        "x": 350,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "key": "userChatInput",
+          "valueType": "string",
+          "label": "用户问题",
+          "isPro": false,
+          "required": true,
+          "renderTypeList": [
+            "reference",
+            "textarea"
+          ],
+          "llmModelType": null,
+          "toolDescription": "用户问题",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": null,
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0,
+          "value": null
+        }
+      ],
+      "outputs": [
+        {
+          "id": "userChatInput",
+          "key": "userChatInput",
+          "label": "用户问题",
+          "description": "用户问题",
+          "type": "static",
+          "valueType": "string",
+          "valueDesc": "",
+          "required": false,
+          "customFieldConfig": null
+        }
+      ]
+    },
+    {
+      "nodeId": "ree0rR1rn60i",
+      "flowNodeType": "chatNode",
+      "name": "大模型会话",
+      "avatar": "/gpt-agent/imgs/workflow/AI.png",
+      "version": "4813",
+      "intro": "可通过提示词让模型对输入内容进行回复",
+      "position": {
+        "x": 750,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "key": "model",
+          "valueType": "string",
+          "label": "模型",
+          "isPro": false,
+          "renderTypeList": [
+            "settingLLMModel"
+          ],
+          "value": "360Sec_chat_v1",
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": null,
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "temperature",
+          "valueType": "number",
+          "label": "",
+          "isPro": false,
+          "renderTypeList": [
+            "hidden"
+          ],
+          "value": 0,
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": null,
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "maxToken",
+          "valueType": "number",
+          "label": "",
+          "isPro": false,
+          "renderTypeList": [
+            "hidden"
+          ],
+          "value": 4000,
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": null,
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "isResponseAnswerText",
+          "valueType": "boolean",
+          "label": "",
+          "isPro": false,
+          "renderTypeList": [
+            "hidden"
+          ],
+          "value": true,
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": null,
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "aiChatVision",
+          "valueType": "boolean",
+          "label": "",
+          "isPro": false,
+          "renderTypeList": [
+            "hidden"
+          ],
+          "value": true,
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": null,
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "systemPrompt",
+          "valueType": "string",
+          "label": "系统提示词",
+          "isPro": false,
+          "renderTypeList": [
+            "textarea",
+            "reference"
+          ],
+          "value": "",
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": null,
+          "max": 3000,
+          "step": null,
+          "description": "模型固定的引导词，通过调整该内容，可以引导模型的聊天方向。该内容会被固定在上下文的开头，可使用变量，例如{{ip}}",
+          "placeholder": "模型固定的引导词，通过调整该内容，可以引导模型的聊天方向。该内容会被固定在上下文的开头，可使用变量，例如{{ip}}",
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "history",
+          "valueType": "chatHistory",
+          "label": "聊天记录",
+          "isPro": false,
+          "renderTypeList": [
+            "numberInput",
+            "reference"
+          ],
+          "value": 0,
+          "required": true,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": 0,
+          "max": 50,
+          "step": null,
+          "description": "最多携带多少轮对话记录",
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "stringQuoteText",
+          "valueType": "any",
+          "label": "文档引用",
+          "isPro": false,
+          "renderTypeList": [
+            "reference",
+            "textarea"
+          ],
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "文档引用",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": "通常用于接受用户上传的文档内容(这需要文档解析)，也可以用于引用其他字符串数据。",
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0,
+          "value": null
+        },
+        {
+          "key": "quoteQA",
+          "valueType": "datasetQuote",
+          "label": "安全知识库引用",
+          "isPro": false,
+          "renderTypeList": [
+            "settingDatasetQuotePrompt"
+          ],
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "安全知识库引用",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": "",
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0,
+          "value": null
+        },
+        {
+          "key": "userChatInput",
+          "valueType": "string",
+          "label": "用户输入",
+          "isPro": false,
+          "renderTypeList": [
+            "reference",
+            "textarea"
+          ],
+          "value": "",
+          "required": true,
+          "llmModelType": null,
+          "toolDescription": "用户问题",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": "用户输入问题",
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "history",
+          "key": "history",
+          "required": true,
+          "label": "新的上下文",
+          "description": "将本次回复内容拼接上历史记录，作为新的上下文返回",
+          "valueType": "chatHistory",
+          "valueDesc": "{\n  obj: System | Human | AI;\n  value: string;\n}[]",
+          "type": "static"
+        },
+        {
+          "id": "answerText",
+          "key": "answerText",
+          "required": true,
+          "label": "AI 恢复内容",
+          "description": "将在 stream 回复完毕后触发",
+          "valueType": "string",
+          "type": "static"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "zUmqwi6UQfjM",
+      "target": "ree0rR1rn60i",
+      "sourceHandle": "zUmqwi6UQfjM-source-right",
+      "targetHandle": "ree0rR1rn60i-target-left"
+    }
+  ],
+  "chatConfig": {
+    "variables": [],
+    "scheduledTriggerConfig": {
+      "cronString": "",
+      "timezone": "Asia/Shanghai",
+      "defaultPrompt": ""
+    },
+    "_id": "36DOcKIrVAKZ0HyybSJEnfqA"
+  }
+}

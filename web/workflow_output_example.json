@@ -1,0 +1,405 @@
+{
+  "nodes": [
+    {
+      "nodeId": "userGuide",
+      "name": "系统配置",
+      "intro": "[系统配置]可以配置应用的系统参数",
+      "avatar": "/gpt-agent/imgs/workflow/systemConfig.png",
+      "flowNodeType": "userGuide",
+      "showStatus": null,
+      "position": {
+        "x": 250.1311549701243,
+        "y": 69.5
+      },
+      "version": "481",
+      "inputs": [
+        {
+          "key": "welcomeText",
+          "valueType": "string",
+          "label": "欢迎语",
+          "isPro": false,
+          "renderTypeList": [
+            "hidden"
+          ],
+          "value": "",
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": null,
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "variables",
+          "valueType": "any",
+          "label": "全局变量配置",
+          "isPro": false,
+          "renderTypeList": [
+            "hidden"
+          ],
+          "value": [],
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": null,
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        }
+      ],
+      "outputs": [],
+      "showResponse": null
+    },
+    {
+      "nodeId": "6f17db7f",
+      "name": "流程开始",
+      "intro": "[流程开始]",
+      "avatar": "/gpt-agent/imgs/workflow/userChatInput.svg",
+      "flowNodeType": "workflowStart",
+      "showStatus": null,
+      "position": {
+        "x": 626.5031128584536,
+        "y": -9
+      },
+      "version": "481",
+      "inputs": [
+        {
+          "key": "userChatInput",
+          "valueType": "string",
+          "label": "用户问题",
+          "isPro": false,
+          "renderTypeList": [
+            "reference",
+            "textarea"
+          ],
+          "required": true,
+          "llmModelType": null,
+          "toolDescription": "用户问题",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": null,
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        }
+      ],
+      "outputs": [
+        {
+          "id": "userChatInput",
+          "key": "userChatInput",
+          "label": "用户问题",
+          "type": "static",
+          "valueType": "string",
+          "description": "用户问题",
+          "valueDesc": null,
+          "required": false,
+          "customFieldConfig": null
+        }
+      ],
+      "showResponse": null
+    },
+    {
+      "nodeId": "b9df5ae7",
+      "name": "影响面分析",
+      "intro": "使用[大模型会话]通过提示词对输入内容让模型进行回复",
+      "avatar": "/gpt-agent/imgs/workflow/AI.png",
+      "flowNodeType": "chatNode",
+      "showStatus": true,
+      "position": {
+        "x": 1122.4397310030226,
+        "y": -209.5
+      },
+      "version": "4813",
+      "inputs": [
+        {
+          "key": "model",
+          "valueType": "string",
+          "label": "模型",
+          "isPro": false,
+          "renderTypeList": [
+            "settingLLMModel"
+          ],
+          "value": "360Sec_chat_v1",
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": null,
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "temperature",
+          "valueType": "number",
+          "label": "",
+          "isPro": false,
+          "renderTypeList": [
+            "hidden"
+          ],
+          "value": 0,
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": null,
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "maxToken",
+          "valueType": "number",
+          "label": "",
+          "isPro": false,
+          "renderTypeList": [
+            "hidden"
+          ],
+          "value": 4000,
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": null,
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "isResponseAnswerText",
+          "valueType": "boolean",
+          "label": "",
+          "isPro": false,
+          "renderTypeList": [
+            "hidden"
+          ],
+          "value": true,
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": null,
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "aiChatVision",
+          "valueType": "boolean",
+          "label": "",
+          "isPro": false,
+          "renderTypeList": [
+            "hidden"
+          ],
+          "value": true,
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": null,
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "systemPrompt",
+          "valueType": "string",
+          "label": "系统提示词",
+          "isPro": false,
+          "renderTypeList": [
+            "textarea",
+            "reference"
+          ],
+          "value": "你是一名EDR影响面分析专家。任务：基于行为链、攻击者、受害者信息，按时间线与父子进程关系判断是否存在攻击链。\n规则：\n1. 不存在则直接输出“不存在”。\n2. 存在则用≤400字简明描述链路：时间->进程父子关系->传播路径->潜在危害。\n3. 字段含义：pid进程ID，p_pid父进程ID，proc_name进程名，p_proc_name父进程名，proc_path进程路径，p_proc_path父进程路径，proc_md5进程MD5，p_proc_md5父进程MD5。\n4. 禁止推理，只输出结论。",
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": null,
+          "max": 3000,
+          "step": null,
+          "description": "core.app.tip.systemPromptTip",
+          "placeholder": "core.app.tip.chatNodeSystemPromptTip",
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "history",
+          "valueType": "chatHistory",
+          "label": "common:core.module.input.label.chat history",
+          "isPro": false,
+          "renderTypeList": [
+            "numberInput",
+            "reference"
+          ],
+          "value": 0,
+          "required": true,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "",
+          "min": 0,
+          "max": 50,
+          "step": null,
+          "description": "workflow:max_dialog_rounds",
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "stringQuoteText",
+          "valueType": "any",
+          "label": "文档引用",
+          "isPro": false,
+          "renderTypeList": [
+            "reference",
+            "textarea"
+          ],
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "文档引用",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": "通常用于接受用户上传的文档内容(这需要文档解析)，也可以用于引用其他字符串数据。",
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "quoteQA",
+          "valueType": "datasetQuote",
+          "label": "",
+          "isPro": false,
+          "renderTypeList": [
+            "settingDatasetQuotePrompt"
+          ],
+          "required": false,
+          "llmModelType": null,
+          "toolDescription": "",
+          "debugLabel": "安全知识库引用",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": "",
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 0
+        },
+        {
+          "key": "userChatInput",
+          "valueType": "string",
+          "label": "用户输入",
+          "isPro": false,
+          "renderTypeList": [
+            "reference",
+            "textarea"
+          ],
+          "value": "行为链：{{$VARIABLE_NODE_ID.behavior_chain$}}；攻击者：{{$VARIABLE_NODE_ID.attacker_info$}}；受害者：{{$VARIABLE_NODE_ID.victim_info$}}",
+          "required": true,
+          "llmModelType": null,
+          "toolDescription": "用户问题",
+          "debugLabel": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "description": "用户输入问题",
+          "placeholder": null,
+          "customInputConfig": null,
+          "canEdit": false,
+          "valueDesc": "",
+          "selectedTypeIndex": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "history",
+          "key": "history",
+          "required": true,
+          "label": "common:core.module.output.label.New context",
+          "description": "将本次回复内容拼接上历史记录，作为新的上下文返回",
+          "valueType": "chatHistory",
+          "valueDesc": "{\n  obj: System | Human | AI;\n  value: string;\n}[]",
+          "type": "static"
+        },
+        {
+          "id": "answerText",
+          "key": "answerText",
+          "required": true,
+          "label": "common:core.module.output.label.Ai response content",
+          "description": "将在 stream 回复完毕后触发",
+          "valueType": "string",
+          "type": "static"
+        }
+      ],
+      "showResponse": true
+    }
+  ],
+  "edges": [
+    {
+      "source": "6f17db7f",
+      "target": "b9df5ae7",
+      "sourceHandle": "6f17db7f-source-right",
+      "targetHandle": "b9df5ae7-target-left"
+    }
+  ],
+  "chatConfig": {
+    "variables": [],
+    "scheduledTriggerConfig": {
+      "cronString": "",
+      "timezone": "Asia/Shanghai",
+      "defaultPrompt": ""
+    },
+    "_id": "69648ee6326b40dc4c8111ff"
+  }
+}

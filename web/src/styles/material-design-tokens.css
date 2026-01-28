@@ -1,0 +1,130 @@
+:root {
+  /* Material Design Monochromatic Palette */
+
+  /* Background Colors */
+  --md-surface: #121212;
+  --md-surface-variant: #1e1e1e;
+  --md-surface-dim: #141414;
+  --md-surface-bright: #2a2a2a;
+
+  /* Primary Colors */
+  --md-primary: #e0e0e0;
+  --md-primary-container: #2a2a2a;
+  --md-on-primary: #000000;
+  --md-on-primary-container: #e0e0e0;
+
+  /* Secondary Colors */
+  --md-secondary: #a0a0a0;
+  --md-secondary-container: #252525;
+  --md-on-secondary: #000000;
+  --md-on-secondary-container: #a0a0a0;
+
+  /* Tertiary Colors */
+  --md-tertiary: #707070;
+  --md-tertiary-container: #202020;
+  --md-on-tertiary: #000000;
+  --md-on-tertiary-container: #707070;
+
+  /* Error Colors */
+  --md-error: #f2b8b5;
+  --md-error-container: #8c1d18;
+  --md-on-error: #601410;
+  --md-on-error-container: #f9dedc;
+
+  /* Neutral Colors */
+  --md-outline: #4a4a4a;
+  --md-outline-variant: #404040;
+  --md-scrim: #000000;
+
+  /* Text Colors */
+  --md-on-surface: #e0e0e0;
+  --md-on-surface-variant: #b0b0b0;
+  --md-on-surface-disabled: #a0a0a066;
+
+  /* State Layers */
+  --md-state-hover-opacity: 0.08;
+  --md-state-focus-opacity: 0.12;
+  --md-state-pressed-opacity: 0.12;
+  --md-state-dragged-opacity: 0.16;
+
+  /* Elevation */
+  --md-elevation-1: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
+  --md-elevation-2: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 2px 6px 2px rgba(0, 0, 0, 0.15);
+  --md-elevation-3: 0 4px 8px 3px rgba(0, 0, 0, 0.15), 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+  --md-elevation-4: 0 6px 10px 4px rgba(0, 0, 0, 0.15), 0 2px 4px 1px rgba(0, 0, 0, 0.3);
+  --md-elevation-5: 0 8px 12px 6px rgba(0, 0, 0, 0.15), 0 4px 4px 2px rgba(0, 0, 0, 0.3);
+
+  /* Shape */
+  --md-shape-corner-none: 0px;
+  --md-shape-corner-extra-small: 4px;
+  --md-shape-corner-small: 8px;
+  --md-shape-corner-medium: 12px;
+  --md-shape-corner-large: 16px;
+  --md-shape-corner-extra-large: 24px;
+  --md-shape-corner-full: 9999px;
+
+  /* Motion */
+  --md-motion-easing-linear: cubic-bezier(0, 0, 1, 1);
+  --md-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --md-motion-easing-standard-accelerate: cubic-bezier(0.3, 0, 1, 1);
+  --md-motion-easing-standard-decelerate: cubic-bezier(0, 0, 0, 1);
+  --md-motion-easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --md-motion-easing-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --md-motion-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+
+  --md-motion-duration-short1: 50ms;
+  --md-motion-duration-short2: 100ms;
+  --md-motion-duration-short3: 150ms;
+  --md-motion-duration-short4: 200ms;
+  --md-motion-duration-medium1: 250ms;
+  --md-motion-duration-medium2: 300ms;
+  --md-motion-duration-medium3: 350ms;
+  --md-motion-duration-medium4: 400ms;
+  --md-motion-duration-long1: 450ms;
+  --md-motion-duration-long2: 500ms;
+  --md-motion-duration-long3: 550ms;
+  --md-motion-duration-long4: 600ms;
+  --md-motion-duration-extra-long1: 700ms;
+  --md-motion-duration-extra-long2: 800ms;
+  --md-motion-duration-extra-long3: 900ms;
+  --md-motion-duration-extra-long4: 1000ms;
+
+  /* Typography */
+  --md-font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+
+  --md-font-size-display-large: 3.5rem;
+  --md-font-size-display-medium: 2.8rem;
+  --md-font-size-display-small: 2.2rem;
+  --md-font-size-headline-large: 2rem;
+  --md-font-size-headline-medium: 1.8rem;
+  --md-font-size-headline-small: 1.6rem;
+  --md-font-size-title-large: 1.4rem;
+  --md-font-size-title-medium: 1.2rem;
+  --md-font-size-title-small: 1.1rem;
+  --md-font-size-body-large: 1rem;
+  --md-font-size-body-medium: 0.9rem;
+  --md-font-size-body-small: 0.8rem;
+  --md-font-size-label-large: 0.9rem;
+  --md-font-size-label-medium: 0.8rem;
+  --md-font-size-label-small: 0.7rem;
+
+  --md-font-weight-regular: 400;
+  --md-font-weight-medium: 500;
+  --md-font-weight-bold: 700;
+
+  --md-line-height-display-large: 4rem;
+  --md-line-height-display-medium: 3.25rem;
+  --md-line-height-display-small: 2.75rem;
+  --md-line-height-headline-large: 2.5rem;
+  --md-line-height-headline-medium: 2.25rem;
+  --md-line-height-headline-small: 2rem;
+  --md-line-height-title-large: 1.75rem;
+  --md-line-height-title-medium: 1.5rem;
+  --md-line-height-title-small: 1.25rem;
+  --md-line-height-body-large: 1.5rem;
+  --md-line-height-body-medium: 1.375rem;
+  --md-line-height-body-small: 1.25rem;
+  --md-line-height-label-large: 1.25rem;
+  --md-line-height-label-medium: 1.125rem;
+  --md-line-height-label-small: 1rem;
+}

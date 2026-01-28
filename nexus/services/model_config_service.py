@@ -1,0 +1,82 @@
+import httpx
+from typing import Optional
+from config.config import get_config
+from config.logger import get_logger
+from common.exceptions import BusinessError
+from pydantic import BaseModel
+
+# 获取全局配置
+settings = get_config()
+logger = get_logger(__name__)
+
+
+class ModelConfig(BaseModel):
+    api_key: str
+    base_url: Optional[str] = None
+    model_id: Optional[str] = None
+    api_mode: Optional[str] = None
+
+def fetch_model_config(model_config_id: int, auth_token: Optional[str] = None) -> Optional[ModelConfig]:
+    """
+    获取完整的模型配置
+    
+    Args:
+        model_config_id: 模型配置 ID
+        auth_token:      用户认证 Token (用于鉴权)
+        
+    Returns:
+        ModelConfig 对象，如果获取失败则返回 None
+    """
+    # 获取模型配置信息
+    url = f"{settings.FASTFLOW_API_URL}/fastflow/api/v1/model_config/{model_config_id}"
+    headers = {}
+    
+    # 转发认证 Token
+    if auth_token:
+        headers["Authorization"] = auth_token
+        
+    try:
+        # 使用同步请求
+        response = httpx.get(url, headers=headers, timeout=5.0)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("code") == 200 or data.get("code") == 0:
+            result = data.get("data", {})
+            encrypted_key = result.get("apiKey")
+            api_key = _decrypt_key(encrypted_key)
+            
+            if not api_key:
+                 return None
+
+            logger.info(f"Successfully fetched Model Config for id {model_config_id}")
+            return ModelConfig(
+                api_key=api_key,
+                base_url=result.get("apiBase"),
+                model_id=result.get("modelId"),
+                api_mode=result.get("apiMode")
+            )
+        else:
+            error_msg = data.get('message', 'Unknown Error')
+            logger.error(f"Failed to fetch Model Config for id {model_config_id}, Error: {error_msg}")
+            raise BusinessError(f"获取模型配置失败: {error_msg}")
+            
+    except BusinessError:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching Model Config for id {model_config_id}: {e}")
+        raise BusinessError(f"获取模型配置时发生错误: {str(e)}")
+
+def _decrypt_key(encrypted_key: str) -> str:
+    """
+    解密 API Key。
+    目前假设后端返回的是明文（或者 Nexus 暂时没有解密逻辑）。
+    如果后端真正加密了，这里需要实现解密算法（如 AES）。
+    """
+    if not encrypted_key:
+        return ""
+    
+    # TODO: 实现真正的解密逻辑
+    # 比如: return decrypt_aes(encrypted_key, SECRET)
+    
+    return encrypted_key

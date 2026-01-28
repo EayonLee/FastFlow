@@ -1,0 +1,36 @@
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# IDE/settings
+.idea/
+.vscode/
+.claude/
+.trae/
+.shared/
+.cursor/
+
+# build artifacts
+web/node_modules/
+web/dist/
+
+# logs
+.logs/
+
+# OS noise
+.DS_Store
+
+# Local env & secrets
+engine/.env
+nexus/.env
+web/.env
+
+# Generated artifacts
+engine/my_workflow.json
+engine/output_example.json
+
+docs/

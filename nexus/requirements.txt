@@ -1,0 +1,27 @@
+# langchain 核心库
+langchain==1.0.1
+langchain-community
+
+# 服务端框架
+fastapi
+uvicorn
+
+# 模型厂商接入支持
+langchain-openai
+langchain-anthropic
+langchain-google-genai
+
+# 其他依赖
+pydantic
+pydantic-settings
+networkx
+unstructured
+python-dotenv
+python-multipart
+httpx>=0.27.0
+pytest>=8.0.0
+black>=24.1.1
+isort>=5.13.2
+
+# 日志库
+loguru
