@@ -1,7 +1,7 @@
 import networkx as nx
-from typing import Dict, Tuple
-from core.schemas import LogicalGraph
-from config.logger import get_logger
+from typing import Dict
+from nexus.core.schemas import LogicalGraph
+from nexus.config.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -44,9 +44,9 @@ class Layouter:
         pos = {}
         try:
             # 获取拓扑分代
-            generations = list(nx.topological_generations(G))
+            generations = list[list](nx.topological_generations(G))
             
-            for gen_index, gen_nodes in enumerate(generations):
+            for gen_index, gen_nodes in enumerate[list](generations):
                 x = gen_index * self.rank_sep
                 
                 # 计算该层的 Y 轴起始点，使其居中

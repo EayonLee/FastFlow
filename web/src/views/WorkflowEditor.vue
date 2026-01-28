@@ -45,15 +45,31 @@ const handleExport = async () => {
   // 画布还没挂载好
   if (!vueFlowCanvasRef.value) return
 
-  // 从子组件把核心数据掏出来
-  const { nodes, edges } = vueFlowCanvasRef.value
+  // 优先使用 getGraphSnapshot 获取当前快照，比直接访问 ref 更稳
+  let nodesData = []
+  let edgesData = []
+
+  if (vueFlowCanvasRef.value.getGraphSnapshot) {
+    const snapshot = vueFlowCanvasRef.value.getGraphSnapshot()
+    nodesData = snapshot.nodes || []
+    edgesData = snapshot.edges || []
+  } else {
+    // Fallback: 兼容直接访问属性的情况 (Vue 3 defineExpose 可能会自动解包 ref)
+    const rawNodes = vueFlowCanvasRef.value.nodes
+    const rawEdges = vueFlowCanvasRef.value.edges
+    nodesData = Array.isArray(rawNodes) ? rawNodes : (rawNodes?.value || [])
+    edgesData = Array.isArray(rawEdges) ? rawEdges : (rawEdges?.value || [])
+  }
+
+  console.log('[WorkflowEditor] Exporting nodes:', nodesData)
+  console.log('[WorkflowEditor] Exporting edges:', edgesData)
   
   try {
     // 走统一的导出逻辑，把动态数据和静态配置缝合一下
-    const json = exportWorkflow(nodes, edges, workflowNodeStore.nodeRegistry, workflow.value)
+    const json = exportWorkflow(nodesData, edgesData, workflowNodeStore.nodeRegistry, workflow.value)
     const jsonString = JSON.stringify(json, null, 2)
     
-    // 浏览器剪贴板 API
+    // 浏览器剪贴板 Nexus
     await navigator.clipboard.writeText(jsonString)
     
     // 使用统一的 Toast 反馈
@@ -70,7 +86,7 @@ const handleExport = async () => {
 
 /**
  * 初始化加载工作流
- * 从 API 获取数据
+ * 从 Nexus 获取数据
  */
 const loadWorkflow = async () => {
   const id = route.params.id as string
@@ -82,15 +98,14 @@ const loadWorkflow = async () => {
         name: data.name || '',
         description: data.description || ''
       }
-      
+
       // 如果有保存的配置，则使用保存的配置渲染画布
       if (data.config && vueFlowCanvasRef.value) {
         try {
           const flowData = JSON.parse(data.config)
           // 确保包含 nodes 和 edges 才能覆盖
           if (Array.isArray(flowData.nodes) && Array.isArray(flowData.edges)) {
-            vueFlowCanvasRef.value.nodes = flowData.nodes
-            vueFlowCanvasRef.value.edges = flowData.edges
+            vueFlowCanvasRef.value.setGraph?.(flowData.nodes, flowData.edges)
             
             // 等待 DOM 更新后适配视图
             nextTick(() => {
@@ -181,7 +196,7 @@ const handleImportWorkflow = () => {
             }
           }))
 
-          vueFlowCanvasRef.value.nodes = nodes
+          // 使用子组件暴露的 setGraph，保证状态更新一致
           
           // 确保边使用自定义的 tech 类型以保持特效
           const edges = flowData.edges.map((edge: any) => ({
@@ -190,7 +205,7 @@ const handleImportWorkflow = () => {
             animated: true // 强制开启流光动画
           }))
           
-          vueFlowCanvasRef.value.edges = edges
+          vueFlowCanvasRef.value.setGraph?.(nodes, edges)
           
           // 等待 DOM 更新节点尺寸后，执行自适应视图
           nextTick(() => {
@@ -217,8 +232,10 @@ const handleImportWorkflow = () => {
  */
 const getGraphData = async () => {
   if (!vueFlowCanvasRef.value) return { nodes: [], edges: [] }
+  const snap = vueFlowCanvasRef.value.getGraphSnapshot?.()
+  if (snap) return { nodes: snap.nodes, edges: snap.edges }
   const { nodes, edges } = vueFlowCanvasRef.value
-  return { nodes, edges }
+  return { nodes: nodes?.value ?? [], edges: edges?.value ?? [] }
 }
 
 /**
@@ -230,38 +247,31 @@ const handleGraphUpdate = (payload: { type: 'layout' | 'graph', data: any }) => 
 
   try {
     if (payload.type === 'layout') {
+      console.log('[WorkflowEditor] Received layout update content:', payload.data)
       // 布局更新：仅更新节点位置
       const positions = payload.data
-      const currentNodes = vueFlowCanvasRef.value.nodes
-      
-      const updatedNodes = currentNodes.map((node: any) => {
-        const pos = positions[node.id]
-        if (pos) {
-          return {
-            ...node,
-            position: { x: pos.x, y: pos.y }
-          }
-        }
-        return node
-      })
-      
-      vueFlowCanvasRef.value.nodes = updatedNodes
+      vueFlowCanvasRef.value.applyLayout?.(positions)
       
       nextTick(() => {
         vueFlowCanvasRef.value.fitView?.({ duration: 800 })
       })
       
     } else if (payload.type === 'graph') {
-      // 全量图更新
       const graphData = payload.data
       if (graphData.nodes && graphData.edges) {
+        console.log('[WorkflowEditor] Received graph update content:', graphData)
         // 转换节点格式以适配 VueFlow
         const nodes = graphData.nodes.map((n: any) => ({
           id: n.id,
-          type: n.type,
-          position: n.position || { x: 0, y: 0 }, // 确保有位置，虽然可能是重叠的，后续会通过 layout 修正
-          data: { ...n.config, label: n.label },
-          label: n.label // VueFlow 某些主题可能直接用 label
+          // 确保使用 flowNodeType 或 type 映射到 VueFlow 的 type
+          type: n.type || n.flowNodeType || (n.data && n.data.flowNodeType),
+          position: (n.data && n.data.position) || { x: 0, y: 0 },
+          data: { 
+            ...n,
+            ...(n.data || {}), 
+            label: n.label || (n.data && n.data.name)
+          },
+          label: n.label || n.name || (n.data && n.data.name)
         }))
         
         const edges = graphData.edges.map((e: any) => ({
@@ -274,16 +284,22 @@ const handleGraphUpdate = (payload: { type: 'layout' | 'graph', data: any }) => 
           animated: true
         }))
         
-        vueFlowCanvasRef.value.nodes = nodes
-        vueFlowCanvasRef.value.edges = edges
+        vueFlowCanvasRef.value.setGraph?.(nodes, edges)
         
         nextTick(() => {
-          vueFlowCanvasRef.value.fitView?.({ duration: 800 })
+          // 渲染完成后自动触发自动布局，覆盖模型生成的坐标
+          if (vueFlowCanvasRef.value.autoLayout) {
+            console.log('[WorkflowEditor] Triggering auto-layout after graph update')
+            vueFlowCanvasRef.value.autoLayout()
+          } else {
+            // Fallback: 如果没有 autoLayout，就只 fitView
+            vueFlowCanvasRef.value.fitView?.({ duration: 800 })
+          }
         })
       }
     }
   } catch (err) {
-    console.error('Failed to update graph from AI:', err)
+    console.error('Failed to update graph from Nexus:', err)
     showToast('Failed to update graph', 'error')
   }
 }

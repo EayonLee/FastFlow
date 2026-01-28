@@ -3,7 +3,7 @@ import en from './locales/en'
 import zh from './locales/zh'
 
 const i18n = createI18n({
-  legacy: false, // Use Composition API
+  legacy: false, // Use Composition Nexus
   locale: 'zh', // Default locale
   fallbackLocale: 'en',
   messages: {

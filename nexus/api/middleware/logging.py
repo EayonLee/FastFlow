@@ -3,7 +3,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
-from config.logger import get_logger
+from nexus.config.logger import get_logger
 
 logger = get_logger(__name__)
 

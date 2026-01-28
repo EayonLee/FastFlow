@@ -1,0 +1,30 @@
+{
+  "items": [
+    [
+      {
+        "connectionType": "SSE",
+        "command": "",
+        "args": [],
+        "url": "http://11.123.252.171/mcp_gateway/asset_vul/sse",
+        "cwd": "",
+        "oauth": "",
+        "clientName": "openmcp.connect.SSE",
+        "clientVersion": "0.0.1",
+        "env": {
+          "HOME": "/Users/eayon",
+          "LOGNAME": "eayon",
+          "PATH": "/Users/eayon/.trae/tools/gradle/latest/bin:/Users/eayon/.trae/binaries/node/versions/24.12.0/bin:/Applications/ServBay/package/openjdk/current.sdk/Contents/Home/bin:/Users/eayon/.trae/tools/maven/latest/bin:/Users/eayon/Library/Python/3.9/bin:/Users/eayon/EayonDev/Software/maven/3.9.11/bin:/Applications/ServBay/script/alias:/Applications/ServBay/bin:/Applications/ServBay/sbin:/Applications/ServBay/script:/Applications/ServBay/package/python/current/Python.framework/Versions/Current/bin:/Applications/ServBay/package/node/current/bin:/Applications/ServBay/package/go/current/bin:/Applications/ServBay/package/openjdk/current/bin:/Applications/ServBay/package/rust/current/bin:/Applications/ServBay/package/ruby/current/bin:/Applications/ServBay/package/dotnetsdk/current:/Applications/ServBay/package/dotnetsdk/current/tools:/Users/eayon/.dotnet/tools/Applications/ServBay/package/mono/current:/Users/eayon/.local/bin:/opt/anaconda3/condabin:/Applications/ServBay/script/alias:/Applications/ServBay/bin:/Applications/ServBay/sbin:/Applications/ServBay/script:/Applications/ServBay/package/python/current/Python.framework/Versions/Current/bin:/Applications/ServBay/package/node/current/bin:/Applications/ServBay/package/go/current/bin:/Applications/ServBay/package/openjdk/current/bin:/Applications/ServBay/package/rust/current/bin:/Applications/ServBay/package/ruby/current/bin:/Applications/ServBay/package/dotnetsdk/current:/Applications/ServBay/package/dotnetsdk/current/tools:/Users/eayon/.dotnet/tools/Applications/ServBay/package/mono/current:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/Applications/Trae.app/Contents/Resources/app/bin/lib",
+          "SHELL": "/bin/zsh",
+          "TERM": "",
+          "USER": "eayon"
+        },
+        "serverInfo": {
+          "name": "mcp-gateway",
+          "version": "v0.9.0\n"
+        },
+        "name": "mcp-gateway",
+        "version": "v0.9.0\n"
+      }
+    ]
+  ]
+}

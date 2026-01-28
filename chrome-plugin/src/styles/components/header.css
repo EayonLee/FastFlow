@@ -1,0 +1,100 @@
+.common-header {
+  height: 40px; /* 统一高度 */
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  user-select: none;
+  transition: background-color 0.3s, border-color 0.3s;
+}
+
+.header-content {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace; /* 统一使用等宽字体 */
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+  cursor: pointer; /* 增加手型光标提示可点击 */
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--accent-neon);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--accent-neon);
+  position: relative;
+}
+
+.status-dot::after {
+  content: '';
+  position: absolute;
+  top: -4px; left: -4px; right: -4px; bottom: -4px;
+  border-radius: 50%;
+  border: 1px solid var(--accent-neon);
+  opacity: 0.3;
+  animation: radar-ping 2s infinite;
+}
+
+.status-text .highlight {
+  color: var(--accent-neon);
+}
+
+.version-tag {
+  font-size: 0.75em;
+  opacity: 0.6;
+  margin-left: 4px;
+  font-weight: normal;
+  color: var(--text-secondary);
+}
+
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  transition: all 0.2s;
+}
+
+.icon-btn:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+@keyframes radar-ping {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+.neon-flicker {
+  animation: text-flicker 3s infinite alternate;
+}
+
+@keyframes text-flicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    text-shadow: 
+      0 0 4px var(--accent-neon),
+      0 0 10px var(--accent-neon);
+  }
+  20%, 24%, 55% {
+    text-shadow: none;
+  }
+}

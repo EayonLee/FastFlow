@@ -1,0 +1,192 @@
+.flow-select-container {
+  position: relative;
+  user-select: none;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* 提高打开状态容器的层级，确保下拉框在最上层 */
+.flow-select-container.is-open {
+  z-index: 2000;
+}
+
+.select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px; /* 减小内边距，从 10px 14px -> 0 10px */
+  border-radius: 6px; /* 稍微减小圆角 8px -> 6px */
+  border: 1px solid var(--border-subtle); 
+  background: var(--bg-surface); 
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.3s, border-color 0.3s;
+  color: var(--text-secondary); 
+  font-size: 12px; /* 字体稍微调小 13px -> 12px */
+  position: relative; 
+  z-index: 999; 
+  backdrop-filter: blur(10px); 
+  -webkit-backdrop-filter: blur(10px);
+  min-height: 28px; /* 降低高度 38px -> 28px，与发送按钮对齐 */
+  height: 28px;
+}
+
+.select-trigger:hover {
+  background: var(--bg-panel); /* 使用主题变量 */
+  color: var(--text-primary); /* 使用主题变量 */
+  border-color: var(--border-active);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.select-trigger.active {
+  background: var(--bg-panel); /* 使用主题变量 */
+  color: var(--text-primary); /* 使用主题变量 */
+  border-color: var(--accent-neon); /* 激活时高亮边框 */
+  box-shadow: 0 0 15px var(--accent-neon-dim); /* 激活时微光 */
+}
+
+.select-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1; /* 确保行高不会撑开容器导致对齐问题 */
+}
+
+.trigger-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  line-height: 1.5; /* 显式设置文字行高 */
+}
+
+.select-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.chevron {
+  opacity: 0.5;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.chevron.rotated {
+  transform: rotate(180deg);
+  opacity: 1;
+  color: var(--accent-neon);
+}
+
+/* Dropdown */
+.select-dropdown {
+  position: absolute;
+  left: 0;
+  /* 移除 width: 100%，让下拉框宽度自适应内容 */
+  min-width: 100%; /* 确保最小宽度与 Trigger 一致 */
+  width: max-content; /* 宽度根据最长的选项内容决定 */
+  
+  /* 科技感面板样式 */
+  background: var(--bg-panel);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 6px;
+  
+  /* 深度阴影 */
+  box-shadow: 
+    0 10px 40px rgba(0, 0, 0, 0.2),
+    0 0 0 1px var(--border-subtle);
+    
+  z-index: 1000;
+  max-height: 240px; /* 稍微增加高度 */
+  overflow-y: auto;
+  transition: background-color 0.3s, border-color 0.3s;
+}
+
+/* Position variants */
+.select-dropdown.top {
+  bottom: 100%;
+  top: auto;
+  margin-bottom: 10px; /* 增加间距 */
+  transform-origin: bottom center;
+}
+
+.select-dropdown.bottom {
+  top: 100%;
+  bottom: auto;
+  margin-top: 10px;
+  transform-origin: top center;
+}
+
+.select-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px; /* 调整内边距，与 trigger 保持水平对齐 */
+  height: 28px; /* 强制高度与 trigger 一致 */
+  font-size: 12px; /* 字体大小一致 */
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 2px;
+  white-space: nowrap; 
+}
+
+.select-item:last-child {
+  margin-bottom: 0;
+}
+
+.select-item:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  transform: translateX(2px); /* 悬停微动效 */
+}
+
+.select-item.active {
+  background: var(--accent-neon-dim);
+  color: var(--accent-neon);
+  font-weight: 500;
+}
+
+/* 图标样式微调 */
+.item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.8;
+}
+
+.select-item.active .item-icon {
+  opacity: 1;
+  filter: drop-shadow(0 0 2px var(--accent-neon));
+}
+
+/* Animation */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(8px) scale(0.98); /* 增加缩放动效 */
+}
+
+/* Scrollbar styling for dropdown */
+.select-dropdown::-webkit-scrollbar {
+  width: 4px;
+}
+.select-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+.select-dropdown::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 2px;
+}
+.select-dropdown::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}

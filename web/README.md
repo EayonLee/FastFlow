@@ -33,12 +33,12 @@ npm run build
   - `components/` - Vue components
   - `views/` - Page views
   - `router/` - Vue Router configuration
-  - `services/` - API services
+  - `services/` - Nexus services
 - `public/` - Static assets
 
-## API Integration
+## Nexus Integration
 
-The frontend communicates with the backend engine module through RESTful APIs. The API calls are proxied through Vite's development server to avoid CORS issues.
+The frontend communicates with the backend engine module through RESTful APIs. The Nexus calls are proxied through Vite's development server to avoid CORS issues.
 
 ## Development
 

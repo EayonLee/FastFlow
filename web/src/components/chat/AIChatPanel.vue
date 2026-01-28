@@ -98,7 +98,7 @@ const selectedModel = ref('')
 const models = ref<{ label: string, value: string, id?: number }[]>([])
 
 // 默认选择的智能体类型
-const selectedAgentType = ref('chat')
+const selectedAgentType = ref('builder')
 // 智能体类型定义
 const agentTypes = [
   { 
@@ -217,6 +217,7 @@ const copyToClipboard = async (msg: Message) => {
   }
 }
 
+
 const handleFeedback = (msg: Message, type: 'like' | 'dislike') => {
   if (msg.feedback === type) {
     msg.feedback = null
@@ -280,7 +281,7 @@ const sendMessage = async () => {
     scrollToBottom()
 
     // 2. 获取当前图数据
-    let currentGraph = null
+    let currentGraph: any = null
     if (props.getGraphData) {
       try {
         const graphData = await props.getGraphData()
@@ -288,8 +289,7 @@ const sendMessage = async () => {
           nodes: graphData.nodes.map(n => ({
             id: n.id,
             type: n.type,
-            label: n.label || n.data?.label,
-            config: n.data || {}
+            data: n.data || {}
           })),
           edges: graphData.edges.map(e => ({
             source: e.source,

@@ -1,9 +1,9 @@
 from functools import lru_cache
-from agents.builder import BuilderAgent
-from agents.chat import ChatAgent
-from agents.layouter import Layouter
-from services.agent_service import AgentService
-from config.logger import get_logger
+from nexus.agents.builder import BuilderAgent
+from nexus.agents.chat import ChatAgent
+from nexus.agents.helpers.layouter import Layouter
+from nexus.services.agent_service import AgentService
+from nexus.config.logger import get_logger
 
 logger = get_logger(__name__)
 

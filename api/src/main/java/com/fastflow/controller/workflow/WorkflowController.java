@@ -36,7 +36,7 @@ public class WorkflowController {
     /**
      * 查询当前用户的工作流列表
      * <p>
-     * 注意：返回的列表中不包含 config 详情，只有基础信息
+     * 返回的列表中不包含 config 详情，只有基础信息
      *
      * @param userInfo 当前登录用户信息
      * @return RestfulResult<List<WorkflowVO>>

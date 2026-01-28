@@ -31,6 +31,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(BusinessException.class)
     public RestfulResult handleBusinessException(BusinessException e) {
+//        log.error(e.getMessage(), e);
         return RestfulResult.error(e.getCode(), e.getMessage());
     }
 
@@ -47,7 +48,7 @@ public class GlobalExceptionHandler {
         String message = bindingResult.getAllErrors().stream()
                 .map(error -> error.getDefaultMessage())
                 .collect(Collectors.joining("; "));
-        log.warn("参数校验异常: {}", message);
+        log.warn("Parameter validation error: {}", message);
         return RestfulResult.error(400, message);
     }
 
@@ -60,7 +61,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public RestfulResult handleException(Exception e) {
-        log.error("系统异常", e);
+        log.error(e.getMessage(), e);
         return RestfulResult.error(-1, "系统繁忙，请稍后重试");
     }
 }

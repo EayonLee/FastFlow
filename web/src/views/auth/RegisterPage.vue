@@ -60,7 +60,7 @@ const sendCode = () => {
     errors.value.email = t('auth.invalid_email_format')
     return
   }
-  // Mock API call
+  // Mock Nexus call
   console.log('Sending code to', form.value.email)
   startTimer()
 }

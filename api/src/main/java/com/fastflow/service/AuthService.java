@@ -115,6 +115,7 @@ public class AuthService {
                 .userInfo(BeanUtil.copyProperties(user, UserInfo.class))
                 .build();
 
+        log.info("用户登录成功，uid={}, username={}, email={}", user.getUid(), user.getUsername(), user.getEmail());
         return loginVO;
     }
 
@@ -230,6 +231,7 @@ public class AuthService {
             throw new BusinessException(ErrorCode.NOT_LOGIN);
         }
 
+        log.debug("Token校验成功: uid={}, username={}, email={}", user.getUid(), user.getUsername(), user.getEmail());
         // 8. 校验通过，返回用户信息
         return UserInfo.builder()
                 .uid(user.getUid())

@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
-from api.metrics import router as metrics_router
-from api.agent import router as agent_router
+from nexus.api.metrics import router as metrics_router
+from nexus.api.agent import router as agent_router
 
 # 统一的基础路由，便于聚合版本前缀并集中注册子路由
 base_router = APIRouter(prefix="/fastflow/nexus/v1")

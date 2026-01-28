@@ -56,7 +56,7 @@ apiClient.interceptors.response.use(
   },
   (error) => {
     const { showToast } = useToast()
-    console.error('API Error:', error)
+    console.error('Nexus Error:', error)
     const msg = error.response?.data?.message || error.message || 'Network Error'
     
     // Handle 401 Unauthorized

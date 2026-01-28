@@ -1,13 +1,13 @@
 from typing import AsyncGenerator
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from core.schemas import BuilderContext
+from nexus.core.schemas import BuilderContext
 from langchain_core.runnables.history import RunnableWithMessageHistory
-from core.memory import get_session_history
-from core.llm_factory import get_or_create_llm
-from core.prompts import CHAT_SYSTEM_PROMPT
-from common.exceptions import BusinessError
-from config.logger import get_logger
+from nexus.core.memory import get_session_history
+from nexus.core.llm_factory import get_or_create_llm
+from nexus.core.prompts import CHAT_SYSTEM_PROMPT
+from nexus.common.exceptions import BusinessError
+from nexus.config.logger import get_logger
 
 logger = get_logger(__name__)
 

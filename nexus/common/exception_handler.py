@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from common.exceptions import BusinessError, AuthError, ParmasValidationError
-from config.logger import get_logger
+from nexus.common.exceptions import BusinessError, AuthError, ParmasValidationError
+from nexus.config.logger import get_logger
 
 logger = get_logger(__name__)
 

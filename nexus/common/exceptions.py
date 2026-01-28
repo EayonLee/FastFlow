@@ -2,7 +2,7 @@
 class BusinessError(Exception):
     """
     通用业务异常基类。
-    用于替代 ValueError 等标准异常，以便在 API 层统一捕获处理，
+    用于替代 ValueError 等标准异常，以便在 Nexus 层统一捕获处理，
     并提供更清晰的错误信息给前端，避免暴露复杂的堆栈信息。
     """
     def __init__(self, message: str):

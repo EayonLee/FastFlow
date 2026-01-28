@@ -1,0 +1,64 @@
+:root, :host {
+  /* 默认 Dark Mode 变量 */
+  --bg-app: #050505;
+  --bg-panel: rgba(10, 10, 10, 0.95);
+  --bg-node: #111111;
+  --bg-surface: #1a1a1a;
+  
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-active: rgba(0, 255, 65, 0.5);
+  --border-glow: rgba(0, 255, 65, 0.3);
+  
+  --text-primary: #f0f0f0;
+  --text-secondary: #a0a0a0;
+  --text-dim: #555555;
+  
+  --accent-neon: #00ff41;
+  --accent-neon-dim: rgba(0, 255, 65, 0.15);
+  --accent-neon-hover: rgba(0, 255, 65, 0.25);
+  --accent-neon-glow: 0 0 15px rgba(0, 255, 65, 0.4);
+  
+  --danger: #ff3333;
+  
+  /* 布局尺寸 */
+  --sidebar-width: 280px;
+  --header-height: 56px;
+  
+  /* 字体 */
+  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /* Plugin Specific */
+  --z-index-max: 2147483647;
+  --chat-width: 500px;
+  --chat-height: 900px;
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  
+  --transition-smooth: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Light Mode Overrides */
+:root[data-theme="light"], :host([data-theme="light"]) {
+  --bg-app: #f9f9f9; /* 稍微带一点灰的背景，避免纯白刺眼 */
+  --bg-panel: rgba(255, 255, 255, 0.98); /* 面板更白更实 */
+  --bg-node: #ffffff;
+  --bg-surface: #ffffff; /* 聊天气泡和输入框背景设为纯白 */
+  
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-active: rgba(0, 200, 80, 0.5); 
+  --border-glow: rgba(0, 200, 80, 0.2);
+  
+  --text-primary: #1f2937; /* 深灰而非纯黑 */
+  --text-secondary: #6b7280;
+  --text-dim: #9ca3af;
+  
+  /* 调整霓虹色在亮色背景下的表现 */
+  --accent-neon: #10b981; /* 使用 Emerald 绿，更适合浅色主题 */
+  --accent-neon-dim: rgba(16, 185, 129, 0.1);
+  --accent-neon-hover: rgba(16, 185, 129, 0.15);
+  --accent-neon-glow: 0 0 15px rgba(16, 185, 129, 0.25);
+  
+  --danger: #ef4444;
+}

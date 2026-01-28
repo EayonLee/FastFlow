@@ -17,17 +17,22 @@ venv/
 # build artifacts
 web/node_modules/
 web/dist/
+web/.npm-cache/
+chrome-plugin/dist/
+chrome-plugin/node_modules/
 
 # logs
 .logs/
+nexus/logs/
+api/logs/
 
 # OS noise
 .DS_Store
 
 # Local env & secrets
 engine/.env
-nexus/.env
-web/.env
+# nexus/.env - commented out, needs to be committed
+# web/.env - commented out, needs to be committed
 
 # Generated artifacts
 engine/my_workflow.json

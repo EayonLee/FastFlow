@@ -1,15 +1,30 @@
+import json
+from typing import AsyncGenerator
+
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import StreamingResponse
-from core.schemas import BuilderContext
-from services.agent_service import AgentService
-from container.dependencies import get_agent_service
-from config.logger import get_logger
-from services.auth_service import check_login
-from common.exceptions import ParmasValidationError, AuthError
+from nexus.core.schemas import BuilderContext
+from nexus.services.agent_service import AgentService
+from nexus.common.dependencies import get_agent_service
+from nexus.config.logger import get_logger
+from nexus.services.auth_service import check_login
+from nexus.common.exceptions import ParmasValidationError, AuthError
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/agent", tags=["agent"])
+
+
+async def _safe_stream(stream: AsyncGenerator[str, None]) -> AsyncGenerator[str, None]:
+    """包装流式输出，确保异常被记录并转换为 SSE 错误事件。"""
+    try:
+        async for chunk in stream:
+            yield chunk
+    except Exception as exc:
+        logger.exception("Streaming response error")
+        payload = {"type": "error", "message": f"Streaming error: {str(exc)}"}
+        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
 
 @router.post("/chat/completions")
 async def chat_completions(
@@ -57,12 +72,12 @@ async def chat_completions(
     # Chat Agent
     if context.agent_type == "chat":
         return StreamingResponse(
-            agent_service.handle_chat_request(context),
+            _safe_stream(agent_service.handle_chat_request(context)),
             media_type="text/event-stream"
         )
 
     # Builder Agent
     return StreamingResponse(
-        agent_service.handle_builder_request(context),
+        _safe_stream(agent_service.handle_builder_request(context)),
         media_type="text/event-stream"
     )

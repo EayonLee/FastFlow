@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional
 from pathlib import Path
 from loguru import logger as loguru_logger
 
-from config.config import get_config
+from nexus.config.config import get_config
 
 settings = get_config()
 
@@ -185,6 +185,10 @@ def setup_logging():
     for logger_name in ["uvicorn", "uvicorn.access", "transformers"]:
         logging.getLogger(logger_name).setLevel(getattr(logging, settings.LOG_LEVEL.upper()))
 
+    # 降低 httpx 请求日志噪声
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpx._client").setLevel(logging.WARNING)
+
     # 应用日志器使用配置文件级别
     app_logger = logging.getLogger("app")
     app_logger.setLevel(getattr(logging, settings.LOG_LEVEL.upper()))
@@ -215,4 +219,3 @@ class LoggerAdapter(logging.LoggerAdapter):
         kwargs["extra"]["extra_fields"].update(self.extra)
         
         return msg, kwargs
-

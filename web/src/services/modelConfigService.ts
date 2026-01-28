@@ -12,7 +12,7 @@ export interface ModelConfigResponse {
   updatedAt: string
 }
 
-// 获取模型配置列表的 API
+// 获取模型配置列表的 Nexus
 export const getModelConfigs = async (): Promise<ModelConfigResponse[]> => {
   try {
     const response = await apiClient.get<ApiResponse<ModelConfigResponse[]>>('/model_config/list')

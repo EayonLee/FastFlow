@@ -1,7 +1,7 @@
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
 from typing import Dict
-from config.logger import get_logger
+from nexus.config.logger import get_logger
 
 logger = get_logger(__name__)
 

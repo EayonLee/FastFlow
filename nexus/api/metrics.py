@@ -1,6 +1,6 @@
 from fastapi import APIRouter
-from config.config import get_config
-from api.response.response import ApiResponse
+from nexus.config.config import get_config
+from nexus.api.response.response import ApiResponse
 
 router = APIRouter(tags=["metrics"])
 

@@ -37,7 +37,7 @@ agentClient.interceptors.response.use(
   },
   (error) => {
     const { showToast } = useToast()
-    console.error('Nexus API Error:', error)
+    console.error('Nexus Error:', error)
     
     // 如果是取消请求，不显示错误
     if (axios.isCancel(error)) {
@@ -143,6 +143,9 @@ export async function streamChat(
               callbacks.onGraphUpdate(data)
             } else if (data.type === 'error') {
               callbacks.onError(data.message)
+            } else if (data.type === 'diff') {
+              // diff 仅用于 UI 展示，当前无需特殊处理
+              // 预留结构，避免未来新增类型时前端静默丢弃
             }
           } catch (e) {
             console.error('Failed to parse SSE message:', e)

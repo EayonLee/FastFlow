@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "FastFlow Copilot",
+  "version": "1.0.0",
+  "description": "FastFlow Vibe Workflow",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "scripting",
+    "storage",
+    "clipboardWrite",
+    "clipboardRead"
+  ],
+  "host_permissions": [
+    "http://localhost:8080/*",
+    "http://127.0.0.1:8080/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "src/content/main.js"
+      ],
+      "css": [],
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/inject/index.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "background": {
+    "service_worker": "src/background/index.js",
+    "type": "module"
+  },
+  "icons": {
+    "16": "src/assets/logo/logo.png",
+    "32": "src/assets/logo/logo.png",
+    "48": "src/assets/logo/logo.png",
+    "128": "src/assets/logo/logo.png"
+  },
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "src/assets/logo/logo.png",
+      "32": "src/assets/logo/logo.png",
+      "48": "src/assets/logo/logo.png",
+      "128": "src/assets/logo/logo.png"
+    }
+  }
+}

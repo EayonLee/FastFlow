@@ -1,11 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
-from api.routes.router import base_router
-from config.config import get_config
-from config.logger import setup_logging, get_logger
-from common.exception_handler import register_exception_handlers
+from nexus.api.routes.router import base_router
+from nexus.config.config import get_config
+from nexus.config.logger import setup_logging, get_logger
+from nexus.common.exception_handler import register_exception_handlers
 
 # 获取配置实例
 settings = get_config()
@@ -46,6 +47,15 @@ def create_app() -> FastAPI:
         allowed_hosts=[settings.APP_HOST, "localhost", "127.0.0.1"]  # 允许的主机列表
     )
 
+    # 配置 CORS 中间件，允许 Chrome 插件访问
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # 允许所有来源，生产环境应限制为特定 extension id
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     # 挂载业务路由
     application.include_router(base_router)
 
@@ -74,7 +84,7 @@ def main() -> None:
 
     # 启动服务器
     uvicorn.run(
-        "main:app",  # 应用实例
+        "nexus.main:app",  # 应用实例
         host=settings.APP_HOST,  # 主机地址
         port=settings.APP_PORT,  # 端口号
         reload=settings.LOG_LEVEL.upper() == "DEBUG",  # 自动重载，仅在DEBUG模式下启用

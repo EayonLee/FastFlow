@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     APP_HOST: str = "0.0.0.0"
     APP_VERSION: str = "1.0.0"
     
-    # FastFlow API 服务端配置
+    # FastFlow Nexus 服务端配置
     FASTFLOW_API_URL: str = "http://localhost:8080"
     
     # 日志配置

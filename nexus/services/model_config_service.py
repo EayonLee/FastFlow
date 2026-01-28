@@ -1,8 +1,8 @@
 import httpx
 from typing import Optional
-from config.config import get_config
-from config.logger import get_logger
-from common.exceptions import BusinessError
+from nexus.config.config import get_config
+from nexus.config.logger import get_logger
+from nexus.common.exceptions import BusinessError
 from pydantic import BaseModel
 
 # 获取全局配置
@@ -36,8 +36,9 @@ def fetch_model_config(model_config_id: int, auth_token: Optional[str] = None) -
         headers["Authorization"] = auth_token
         
     try:
-        # 使用同步请求
-        response = httpx.get(url, headers=headers, timeout=5.0)
+        # 使用同步请求，显式禁用代理（避免 VPN/系统代理干扰本地请求）
+        with httpx.Client(trust_env=False) as client:
+            response = client.get(url, headers=headers, timeout=5.0)
         response.raise_for_status()
         data = response.json()
         
@@ -49,7 +50,7 @@ def fetch_model_config(model_config_id: int, auth_token: Optional[str] = None) -
             if not api_key:
                  return None
 
-            logger.info(f"Successfully fetched Model Config for id {model_config_id}")
+            logger.debug(f"Successfully fetched Model Config for model_config_id: {model_config_id}")
             return ModelConfig(
                 api_key=api_key,
                 base_url=result.get("apiBase"),
@@ -69,7 +70,7 @@ def fetch_model_config(model_config_id: int, auth_token: Optional[str] = None) -
 
 def _decrypt_key(encrypted_key: str) -> str:
     """
-    解密 API Key。
+    解密 Nexus Key。
     目前假设后端返回的是明文（或者 Nexus 暂时没有解密逻辑）。
     如果后端真正加密了，这里需要实现解密算法（如 AES）。
     """

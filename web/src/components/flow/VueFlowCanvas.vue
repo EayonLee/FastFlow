@@ -1,20 +1,40 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
-import { Background } from '@vue-flow/background'
-import { Controls, ControlButton } from '@vue-flow/controls'
-import { VueFlow, useVueFlow } from '@vue-flow/core'
-import { useI18n } from 'vue-i18n'
-import { getDefaultWorkflowCanvas } from '@/services/workflowService'
+import {onMounted, ref, watch} from 'vue'
+import {Background} from '@vue-flow/background'
+import {ControlButton, Controls} from '@vue-flow/controls'
+import {useVueFlow, VueFlow} from '@vue-flow/core'
+import {useI18n} from 'vue-i18n'
+import {getDefaultWorkflowCanvas} from '@/services/workflowService'
 import UserGuideNode from '@/components/flow/nodes/UserGuide/UserGuideNode.vue'
 import WorkflowStartNode from '@/components/flow/nodes/WorkflowStart/WorkflowStartNode.vue'
 import ChatNode from '@/components/flow/nodes/Chat/ChatNode.vue'
 import TechEdge from '@/components/flow/styles/TechEdge.vue'
+import { useAutoLayout } from '@/composables/useAutoLayout'
 
 const { t } = useI18n()
 const { fitView, zoomIn, zoomOut, onNodeDragStop, onConnect, onEdgeUpdateEnd, onPaneReady, project } = useVueFlow()
+const { layout } = useAutoLayout()
 
 const nodes = ref<any[]>([])
 const edges = ref<any[]>([])
+
+/**
+ * 自动布局
+ * 使用 Dagre 算法对节点进行自动排列
+ */
+const handleAutoLayout = () => {
+  const layoutedNodes = layout(nodes.value, edges.value, 'LR')
+  
+  // 更新节点位置
+  nodes.value = [...layoutedNodes]
+  
+  // 适应视图
+  setTimeout(() => {
+    fitView({ duration: 800, padding: 0.2 })
+  }, 50)
+  
+  saveHistory()
+}
 
 // 拖拽相关处理
 const onDragOver = (event: DragEvent) => {
@@ -42,7 +62,7 @@ const onDrop = (event: DragEvent) => {
 
     const newNode = {
       id: `node-${Date.now()}`,
-      type: nodeData.flowNodeType,
+      type: nodeData.flowNodeType || nodeData.type,
       position,
       data: { ...nodeData }
     }
@@ -61,10 +81,13 @@ onMounted(async () => {
     if (defaultCanvas) {
       // 映射后端数据结构到 Vue Flow 格式
       nodes.value = (defaultCanvas.nodes || []).map((node: any) => ({
-        id: node.nodeId,
-        type: node.flowNodeType,
+        id: node.nodeId || node.id,
+        type: node.flowNodeType || node.type || node.data?.flowNodeType,
         position: node.position,
-        data: { ...node }
+        data: { 
+          ...node,
+          ...(node.data || {}) 
+        }
       }))
       edges.value = defaultCanvas.edges || []
       // 记录初始状态
@@ -125,6 +148,46 @@ watch(() => [nodes.value.length, edges.value.length], () => {
   saveHistory()
 })
 
+// 提供给父组件的接口：全量替换节点/连线
+const setGraph = (newNodes: any[], newEdges: any[]) => {
+  // 确保节点数据结构符合 Vue Flow 标准 (data 字段包含业务数据)
+  const processedNodes = Array.isArray(newNodes) ? newNodes.map((node: any) => {
+    return {
+      id: node.id || node.nodeId,
+      type: node.type || node.flowNodeType,
+      position: node.position || {x: 0, y: 0},
+      data: {
+        ...node,
+        ...(node.data || {})
+      }
+    }
+  }) : []
+  
+  // 使用新的数组引用触发响应式更新
+  nodes.value = [...processedNodes]
+  edges.value = Array.isArray(newEdges) ? [...newEdges] : []
+  
+  // 意味着 VueFlowCanvas 组件收到了新的节点和连线数据
+  console.log('[VueFlowCanvas] Graph updated nodes:', nodes.value)
+  console.log('[VueFlowCanvas] Graph updated edges:', edges.value)
+  saveHistory()
+}
+
+// 提供给父组件的接口：仅更新位置
+const applyLayout = (positions: Record<string, { x: number, y: number }>) => {
+  if (!positions) return
+  nodes.value = nodes.value.map(node => {
+    const pos = positions[node.id]
+    return pos ? { ...node, position: { x: pos.x, y: pos.y } } : node
+  })
+}
+
+// 提供给父组件的接口：获取当前图快照
+const getGraphSnapshot = () => ({
+  nodes: nodes.value,
+  edges: edges.value
+})
+
 // 撤销操作
 const undo = () => {
   if (historyIndex.value > 0) {
@@ -155,11 +218,15 @@ onPaneReady(() => {
   fitView()
 })
 
-// 暴露节点和边给父组件
+// 暴露节点和边及操作给父组件
 defineExpose({
   nodes,
   edges,
-  fitView
+  fitView,
+  setGraph,
+  applyLayout,
+  getGraphSnapshot,
+  autoLayout: handleAutoLayout
 })
 
 </script>
@@ -218,6 +285,10 @@ defineExpose({
 
         <ControlButton @click="fitView" :data-title="t('editor.fit_view')">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
+        </ControlButton>
+
+        <ControlButton @click="handleAutoLayout" :data-title="t('editor.auto_layout') || 'Auto Layout'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
         </ControlButton>
 
         <div class="control-separator">|</div>

@@ -1,6 +1,6 @@
 import apiClient, { type ApiResponse } from './http'
 
-// Auth API
+// Auth Nexus
 export const login = async (data: any) => {
   const response = await apiClient.post<ApiResponse>('/auth/login', data)
   return response.data

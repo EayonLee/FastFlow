@@ -70,7 +70,7 @@ export interface CanvasResponse {
   edges: any[]
 }
 
-// 生成流程图的 API
+// 生成流程图的 Nexus
 export const generateWorkflow = async (request: WorkflowRequest): Promise<WorkflowResponse> => {
   try {
     const response = await apiClient.post<ApiResponse<WorkflowResponse>>('/workflow/generate', request)
@@ -80,7 +80,7 @@ export const generateWorkflow = async (request: WorkflowRequest): Promise<Workfl
   }
 }
 
-// 获取流程图的 API
+// 获取流程图的 Nexus
 export const getWorkflow = async (id: string): Promise<WorkflowResponse> => {
   try {
     const response = await apiClient.get<ApiResponse<WorkflowResponse>>(`/workflow/${id}`)
@@ -90,7 +90,7 @@ export const getWorkflow = async (id: string): Promise<WorkflowResponse> => {
   }
 }
 
-// 创建流程图 API
+// 创建流程图 Nexus
 export const createWorkflow = async (data: any): Promise<any> => {
   try {
     const response = await apiClient.post<ApiResponse<any>>('/workflow/create', data)
@@ -107,7 +107,7 @@ export const createWorkflow = async (data: any): Promise<any> => {
   }
 }
 
-// 更新流程图 API
+// 更新流程图 Nexus
 export const updateWorkflow = async (id: string, data: any): Promise<any> => {
   try {
     const response = await apiClient.put<ApiResponse<any>>(`/workflow/update/${id}`, data)
@@ -117,7 +117,7 @@ export const updateWorkflow = async (id: string, data: any): Promise<any> => {
   }
 }
 
-// 删除流程图 API
+// 删除流程图 Nexus
 export const deleteWorkflow = async (id: string): Promise<void> => {
   try {
     await apiClient.delete<ApiResponse<any>>(`/workflow/delete/${id}`)
@@ -147,7 +147,7 @@ export const getDefaultWorkflowCanvas = async (): Promise<CanvasResponse> => {
   }
 }
 
-// 获取流程图列表的 API
+// 获取流程图列表的 Nexus
 export const getWorkflows = async (): Promise<WorkflowResponse[]> => {
   try {
     const response = await apiClient.get<ApiResponse<WorkflowResponse[]>>('/workflow/list')
