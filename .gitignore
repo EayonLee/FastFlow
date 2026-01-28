@@ -26,8 +26,8 @@ web/dist/
 
 # Local env & secrets
 engine/.env
-nexus/.env
-web/.env
+# nexus/.env - commented out, needs to be committed
+# web/.env - commented out, needs to be committed
 
 # Generated artifacts
 engine/my_workflow.json
