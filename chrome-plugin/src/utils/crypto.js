@@ -12,7 +12,7 @@ const KEY = CryptoJS.enc.Utf8.parse(KEY_STR)
  * @param word 待加密字符串
  * @returns 加密后的 Base64 字符串
  */
-export const encrypt = (word: string): string => {
+export const encrypt = (word) => {
   if (!word) return ''
   const srcs = CryptoJS.enc.Utf8.parse(word)
   const encrypted = CryptoJS.AES.encrypt(srcs, KEY, {
@@ -27,7 +27,7 @@ export const encrypt = (word: string): string => {
  * @param word 待解密字符串
  * @returns 解密后的字符串
  */
-export const decrypt = (word: string): string => {
+export const decrypt = (word) => {
   if (!word) return ''
   const bytes = CryptoJS.AES.decrypt(word, KEY, {
     mode: CryptoJS.mode.ECB,
