@@ -10,6 +10,7 @@ venv/
 .idea/
 .vscode/
 .claude/
+.openmcp/
 .trae/
 .shared/
 .cursor/
