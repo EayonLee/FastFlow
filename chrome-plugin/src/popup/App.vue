@@ -3,17 +3,18 @@
  * Popup 组件
  * 作用：Chrome 插件的弹出窗口，用于显示状态、设置或快捷操作。
  */
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import Header from '@/components/Header.vue'
+import { authService } from '@/services/auth.js'
+import { cache } from '@/utils/cache.js'
+import { createAuthGuard } from '@/utils/authGuard.js'
 import Landing from './views/Landing.vue'
 import Login from './views/Login.vue'
 import Register from './views/Register.vue'
 import Dashboard from './views/Dashboard.vue'
-import { authService } from '@/services/auth.js'
-import { cache } from '@/utils/cache.js'
-import { createAuthGuard } from '@/utils/authGuard.js'
 
 // 简单的路由状态管理
+const AUTH_VIEWS = new Set(['landing', 'login', 'register'])
 const currentView = ref('landing')
 const user = ref(null)
 // 监听路由变化并持久化
@@ -25,12 +26,12 @@ watch(currentView, (newView) => {
 const isLoggedIn = computed(() => !!user.value)
 
 // 导航处理
-const navigateTo = (view) => {
+function navigateTo(view) {
   currentView.value = view
 }
 
 // 登录成功处理
-const handleLoginSuccess = (userData) => {
+function handleLoginSuccess(userData) {
   user.value = userData
   // 跳转到仪表盘
   currentView.value = 'dashboard'
@@ -38,8 +39,8 @@ const handleLoginSuccess = (userData) => {
 
 let authGuard = null
 
-// 初始化检查
-const init = async () => {
+// 同步用户信息与视图
+async function syncSession() {
   const savedView = await cache.get('lastView')
   if (savedView) {
     currentView.value = savedView
@@ -49,30 +50,20 @@ const init = async () => {
   const token = await authService.getToken()
 
   if (!savedUser || !token) {
+    user.value = null
     if (currentView.value === 'dashboard') {
       currentView.value = 'landing'
     }
     return
   }
 
-  try {
-    user.value = savedUser
-  } catch (e) {
-    console.error('Failed to parse user info', e)
-    handleLogout()
-    return
-  }
-
-  try {
-    if (['landing', 'login', 'register'].includes(currentView.value)) {
-      currentView.value = 'dashboard'
-    }
-  } catch (e) {
-    handleLogout()
+  user.value = savedUser
+  if (AUTH_VIEWS.has(currentView.value)) {
+    currentView.value = 'dashboard'
   }
 }
 
-const handleLogout = () => {
+function handleLogout() {
   user.value = null
   authService.logout()
   cache.remove('user')
@@ -82,7 +73,7 @@ const handleLogout = () => {
   stopAuthPolling()
 }
 
-const handleHeaderClick = () => {
+function handleHeaderClick() {
   if (isLoggedIn.value) {
     currentView.value = 'dashboard'
   } else {
@@ -91,7 +82,7 @@ const handleHeaderClick = () => {
 }
 
 // 定时轮询登录状态，处理会话过期
-const startAuthPolling = () => {
+function startAuthPolling() {
   stopAuthPolling()
   authGuard = createAuthGuard({
     onAuthedChange: (val) => {
@@ -101,16 +92,14 @@ const startAuthPolling = () => {
         currentView.value = 'landing'
         return
       }
-      // 已登录：确保能回到仪表盘
-      if (['landing', 'login', 'register'].includes(currentView.value)) {
-        currentView.value = 'dashboard'
-      }
+      // 已登录：同步用户信息与视图
+      syncSession()
     }
   })
   authGuard.start()
 }
 
-const stopAuthPolling = () => {
+function stopAuthPolling() {
   if (authGuard) {
     authGuard.stop()
     authGuard = null
@@ -118,7 +107,7 @@ const stopAuthPolling = () => {
 }
 
 onMounted(() => {
-  init()
+  syncSession()
   startAuthPolling()
 })
 
@@ -154,7 +143,7 @@ onUnmounted(() => {
         
         <!-- Dashboard View -->
         <Dashboard 
-          v-else-if="currentView === 'dashboard'" 
+          v-else-if="currentView === 'dashboard' && user" 
           :user="user"
           @logout="handleLogout"
         />

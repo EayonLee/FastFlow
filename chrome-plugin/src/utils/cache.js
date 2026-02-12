@@ -6,6 +6,7 @@
 import { StorageAdapter } from '@/utils/storageAdapter.js'
 
 const adapter = new StorageAdapter('local')
+const DEFAULT_TTL_MS = 5 * 60 * 1000
 
 export const cache = {
   /**
@@ -30,7 +31,7 @@ export const cache = {
    * @param {any} value 值
    * @param {number} ttl 过期时间（毫秒），默认 5 分钟
    */
-  async setWithTTL(key, value, ttl = 5 * 60 * 1000) {
+  async setWithTTL(key, value, ttl = DEFAULT_TTL_MS) {
     const item = {
       value,
       expiry: Date.now() + ttl
@@ -56,7 +57,7 @@ export const cache = {
       
       return item.value
     } catch (e) {
-      console.error('Cache parse error:', e)
+      console.error('[FastFlow] Cache parse error:', e)
       return null
     }
   },

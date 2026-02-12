@@ -12,6 +12,11 @@ import { getModelConfigs } from '@/services/modelConfig.js'
 import { Layout } from '@/utils/layout.js'
 import { generateUuid32 } from '@/utils/uuid.js'
 
+// 存储 key（用于记住聊天框尺寸）
+const CHAT_SIZE_STORAGE_KEY = 'chat_box_size'
+// 默认欢迎语
+const WELCOME_MESSAGE = 'Hi 我是 NEXUS，你的智能工作流助手。告诉我你想要什么样的工作流吧！'
+
 /**
  * 聊天视图组件
  * 作用：处理与用户的聊天交互、工作流生成和渲染请求。
@@ -35,8 +40,8 @@ const selectedModel = ref('')
 
 // 可选智能体列表
 const agents = [
-    { id: 'chat', label: 'Chat', icon: MessageSquare, color: '#00ff41' },
-    { id: 'builder', label: 'SOLO Builder', icon: Bot, color: '#c084fc' }
+  { id: 'chat', label: 'Chat', icon: MessageSquare, color: '#00ff41' },
+  { id: 'builder', label: 'SOLO Builder', icon: Bot, color: '#c084fc' }
 ]
 
 // 可选模型列表（由后端配置拉取）
@@ -48,7 +53,7 @@ const messages = ref([
   { 
     id: generateUuid32(),
     type: 'ai', 
-    content: 'Hi 我是 NEXUS，你的智能工作流助手。告诉我你想要什么样的工作流吧！',
+    content: WELCOME_MESSAGE,
     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
 ])
@@ -72,32 +77,49 @@ const resizer = useResizable(containerRef, {
     isResizing.value = val
   },
   // 聊天框大小缓存key
-  storageKey: 'chat_box_size'
+  storageKey: CHAT_SIZE_STORAGE_KEY
 })
+
+// 创建消息对象（统一时间格式）
+function createMessage(content, type, extra = {}) {
+  return {
+    id: generateUuid32(),
+    type,
+    content,
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    ...extra
+  }
+}
 
 // 根据消息 ID 查找消息对象
 function findMessage(id) {
   return messages.value.find(m => m.id === id)
 }
 
+// 统一更新消息内容（可选更新 loading）
+function updateMessage(id, updater) {
+  const target = findMessage(id)
+  if (!target) return null
+  updater(target)
+  return target
+}
+
 // 写入错误消息并滚动到底部
 function setMessageError(id, message) {
-  const target = findMessage(id)
-  if (!target) return
-  target.isLoading = false
-  target.content = message
+  updateMessage(id, (target) => {
+    target.isLoading = false
+    target.content = message
+  })
   scrollToBottom()
 }
 
 // 将流式文本追加到指定消息
 function appendChunkToMessage(id, chunk) {
   if (!chunk) return
-  const target = findMessage(id)
-  if (!target) return
-  if (target.isLoading) {
-    target.isLoading = false
-  }
-  target.content = `${target.content || ''}${chunk}`
+  updateMessage(id, (target) => {
+    if (target.isLoading) target.isLoading = false
+    target.content = `${target.content || ''}${chunk}`
+  })
   scrollToBottom()
 }
 
@@ -183,12 +205,7 @@ function scrollToBottom() {
 
 // 添加消息辅助函数
 function addMessage(content, type) {
-  messages.value.push({
-    id: generateUuid32(), // 使用 32 位 UUID，避免冲突
-    type,
-    content,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  })
+  messages.value.push(createMessage(content, type))
   scrollToBottom()
 }
 
@@ -215,14 +232,7 @@ async function handleGenerate() {
 
   // 4) 显示加载中消息（用于流式更新）
   const loadingMsgId = generateUuid32() // 使用 32 位 UUID，避免冲突
-  const loadingMsg = {
-    id: loadingMsgId,
-    type: 'ai',
-    content: '',
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    isLoading: true
-  }
-  messages.value.push(loadingMsg)
+  messages.value.push(createMessage('', 'ai', { id: loadingMsgId, isLoading: true }))
   scrollToBottom()
 
   // 5) 获取当前工作流 JSON 配置
@@ -254,8 +264,9 @@ async function handleGenerate() {
     (graphData) => {
       // Chat 智能体不返回图，直接结束
       if (isChatAgent) {
-        const targetMsg = findMessage(loadingMsgId)
-        if (targetMsg?.isLoading) targetMsg.isLoading = false
+        updateMessage(loadingMsgId, (target) => {
+          if (target.isLoading) target.isLoading = false
+        })
         isLoading.value = false
         return
       }

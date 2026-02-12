@@ -1,6 +1,6 @@
-import { Logger } from '@/utils/logger.js'
-import { CONFIG } from '@/config/index.js'
 import { authService } from '@/services/auth.js'
+import { CONFIG } from '@/config/index.js'
+import { Logger } from '@/utils/logger.js'
 
 /**
  * 生成工作流（调用 Nexus 的流式接口）
@@ -47,22 +47,22 @@ async function generateWorkflow(params, onChunk, onComplete, onError) {
       return
     }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let finalGraph = null;
-    let streamErrorMessage = '';
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let finalGraph = null
+    let streamErrorMessage = ''
 
     // 逐块读取 SSE 数据并解析 data: 行
     while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const text = decoder.decode(value);
-      const lines = text.split('\n');
+      const { done, value } = await reader.read()
+      if (done) break
+      const text = decoder.decode(value)
+      const lines = text.split('\n')
       
       for (const line of lines) {
         if (line.startsWith('data: ')) {
           try {
-            const json = JSON.parse(line.substring(6));
+            const json = JSON.parse(line.substring(6))
             // 流式文本片段（chat/builder 都可能返回）
             if (json.type === 'chunk' && onChunk) onChunk(json.content)
             // 后端流式错误（例如鉴权失败/校验失败）
@@ -71,7 +71,7 @@ async function generateWorkflow(params, onChunk, onComplete, onError) {
             }
             // 最终图结构（仅 builder 会返回）
             if (json.type === 'graph') {
-              finalGraph = json.data;
+              finalGraph = json.data
             }
           } catch (e) {
             // 单行解析失败时跳过，避免阻塞整个流
@@ -82,13 +82,13 @@ async function generateWorkflow(params, onChunk, onComplete, onError) {
     
     // SSE 结束后，优先处理流式错误
     if (streamErrorMessage) {
-      onError(new Error(streamErrorMessage));
+      onError(new Error(streamErrorMessage))
       return
     }
 
     if (finalGraph) {
       // Builder 成功：返回图结构
-      onComplete(finalGraph);
+      onComplete(finalGraph)
     } else {
       // Chat 不返回图；Builder 必须有图
       if (params.agentType === 'builder') {
@@ -101,7 +101,7 @@ async function generateWorkflow(params, onChunk, onComplete, onError) {
   } catch (err) {
     // 网络错误或解析异常
     Logger.error('Request Nexus Error:', err)
-    onError(err);
+    onError(err)
   }
 }
 

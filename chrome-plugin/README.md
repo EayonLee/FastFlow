@@ -1,6 +1,6 @@
 ```text
 src/
-├── background/         # Service Worker (后台服务)
+├── chatbox/            # Chatbox (注入页面的聊天框应用)
 │   └── index.js
 ├── content/            # Content Script (注入页面的聊天框应用)
 │   ├── main.js         # 入口

@@ -1,7 +1,7 @@
-import { createApp } from 'vue'
-import App from './App.vue'
 import { Logger } from '@/utils/logger.js'
 import { themeManager } from '@/utils/themeManager.js'
+import { createApp } from 'vue'
+import App from './App.vue'
 
 // 引入样式文件
 import variablesCss from '@/styles/variables.css?inline'
@@ -16,48 +16,48 @@ import headerCss from '@/styles/components/header.css?inline'
  */
 export class MountManager {
   constructor() {
-    this.hostId = 'fastflow-copilot-host';
-    this.appInstance = null;
-    this.hostElement = null;
+    this.hostId = 'fastflow-copilot-host'
+    this.appInstance = null
+    this.hostElement = null
   }
 
   /**
    * 初始化并挂载 Vue 应用
    */
   mount() {
-    Logger.info('Initializing Vue UI...');
+    Logger.info('Initializing Vue UI...')
     
     // 1. 清理可能存在的旧实例
-    this.cleanup();
+    this.cleanup()
 
     // 2. 创建宿主容器
-    this.hostElement = this.createHostElement();
-    document.body.appendChild(this.hostElement);
+    this.hostElement = this.createHostElement()
+    document.body.appendChild(this.hostElement)
 
     // 3. 注册到 ThemeManager，实现主题同步
-    themeManager.register(this.hostElement);
+    themeManager.register(this.hostElement)
 
     // 4. 创建 Shadow DOM 环境
-    const shadow = this.hostElement.attachShadow({ mode: 'open' });
-    this.injectStyles(shadow);
+    const shadow = this.hostElement.attachShadow({ mode: 'open' })
+    this.injectStyles(shadow)
 
     // 5. 挂载 Vue 应用
-    const appRoot = document.createElement('div');
-    appRoot.id = 'app';
-    shadow.appendChild(appRoot);
+    const appRoot = document.createElement('div')
+    appRoot.id = 'app'
+    shadow.appendChild(appRoot)
 
-    this.appInstance = createApp(App);
-    this.appInstance.mount(appRoot);
+    this.appInstance = createApp(App)
+    this.appInstance.mount(appRoot)
 
-    Logger.info('Vue App Mounted');
+    Logger.info('Vue App Mounted')
   }
 
   /**
    * 创建宿主 DOM 元素
    */
   createHostElement() {
-    const host = document.createElement('div');
-    host.id = this.hostId;
+    const host = document.createElement('div')
+    host.id = this.hostId
     
     // 基础样式配置，确保不干扰页面布局
     Object.assign(host.style, {
@@ -68,44 +68,44 @@ export class MountManager {
       width: '0',
       height: '0',
       overflow: 'visible'
-    });
+    })
 
-    return host;
+    return host
   }
 
   /**
    * 注入样式到 Shadow DOM
    */
   injectStyles(shadowRoot) {
-    const styleTag = document.createElement('style');
+    const styleTag = document.createElement('style')
     styleTag.textContent = [
       variablesCss, 
       baseCss, 
       chatCss, 
       flowSelectCss, 
       headerCss
-    ].join('\n');
-    shadowRoot.appendChild(styleTag);
+    ].join('\n')
+    shadowRoot.appendChild(styleTag)
   }
 
   /**
    * 清理实例
    */
   cleanup() {
-    const existing = document.getElementById(this.hostId);
+    const existing = document.getElementById(this.hostId)
     if (existing) {
-      console.log('[FastFlow] Cleaning up old instance...');
-      existing.remove();
+      Logger.info('Cleaning up old instance...')
+      existing.remove()
     }
     
     if (this.appInstance) {
-      this.appInstance.unmount();
-      this.appInstance = null;
+      this.appInstance.unmount()
+      this.appInstance = null
     }
     
-    this.hostElement = null;
+    this.hostElement = null
   }
 }
 
 // 单例导出
-export const mountManager = new MountManager();
+export const mountManager = new MountManager()

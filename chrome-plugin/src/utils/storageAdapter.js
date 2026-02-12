@@ -15,13 +15,7 @@ export class StorageAdapter {
         })
       })
     }
- 
-    const raw = localStorage.getItem(key)
-    try {
-      return raw == null ? undefined : JSON.parse(raw)
-    } catch {
-      return raw == null ? undefined : raw
-    }
+    return this.getFromLocalStorage(key)
   }
  
   async set(key, value) {
@@ -31,7 +25,6 @@ export class StorageAdapter {
       })
       return
     }
- 
     localStorage.setItem(key, JSON.stringify(value))
   }
  
@@ -67,5 +60,13 @@ export class StorageAdapter {
     window.addEventListener('storage', handler)
     return () => window.removeEventListener('storage', handler)
   }
-}
 
+  getFromLocalStorage(key) {
+    const raw = localStorage.getItem(key)
+    try {
+      return raw == null ? undefined : JSON.parse(raw)
+    } catch {
+      return raw == null ? undefined : raw
+    }
+  }
+}

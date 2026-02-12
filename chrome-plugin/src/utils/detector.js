@@ -1,20 +1,21 @@
-import { CONFIG } from '@/config/index.js';
+import { CONFIG } from '@/config/index.js'
 
-let isDetected = false;
+let isDetected = false
 
 function check() {
   // 只要有选择器匹配即可
-  const hasCanvas = CONFIG.ELEMENT_SELECTORS.some(selector => document.querySelector(selector));
-  return hasCanvas;
+  return CONFIG.ELEMENT_SELECTORS.some((selector) => document.querySelector(selector))
 }
 
 function getEnvInfo() {
-  return window.self === window.top ? 'Main Window' : 'Iframe';
+  return window.self === window.top ? 'Main Window' : 'Iframe'
 }
 
 export const Detector = {
   check,
   getEnvInfo,
   isDetected: () => isDetected,
-  setDetected: (val) => { isDetected = val; }
-};
+  setDetected: (val) => {
+    isDetected = val
+  }
+}

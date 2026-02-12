@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { cache } from '@/utils/cache.js'
 import { authService } from '@/services/auth.js'
 import NeonButton from '@/components/NeonButton.vue'
-import { cache } from '@/utils/cache.js'
+import { onMounted, ref, watch } from 'vue'
+import validator from 'validator'
 
 const emit = defineEmits(['navigate', 'login-success'])
 
@@ -19,16 +20,20 @@ const errors = ref({
 const isLoading = ref(false)
 const rememberAccount = ref(false)
 
+const LOGIN_FORM_CACHE_KEY = 'login_form_cache'
+const REMEMBER_ACCOUNT_KEY = 'remembered_account'
+const LOGIN_FORM_TTL = 5 * 60 * 1000
+
 // 监听表单变化并保存到 chrome.storage.local（临时缓存，非记住账号）
 watch(form, (newVal) => {
   // 只在未记住账号的情况下缓存输入内容，避免覆盖记住的账号
   if (!rememberAccount.value) {
-    cache.setWithTTL('login_form_cache', newVal, 5 * 60 * 1000) // 5分钟过期
+    cache.setWithTTL(LOGIN_FORM_CACHE_KEY, newVal, LOGIN_FORM_TTL) // 5分钟过期
   }
 }, { deep: true })
 
 onMounted(async () => {
-  const savedAccount = await cache.get('remembered_account')
+  const savedAccount = await cache.get(REMEMBER_ACCOUNT_KEY)
   if (savedAccount) {
     try {
       const { email, password } = typeof savedAccount === 'string' ? JSON.parse(savedAccount) : savedAccount
@@ -42,7 +47,7 @@ onMounted(async () => {
     }
   } else {
     // 如果没有记住账号，尝试恢复临时缓存
-    const cachedForm = await cache.getWithTTL('login_form_cache')
+    const cachedForm = await cache.getWithTTL(LOGIN_FORM_CACHE_KEY)
     if (cachedForm) {
       form.value.email = cachedForm.email || ''
       form.value.password = cachedForm.password || ''
@@ -50,21 +55,17 @@ onMounted(async () => {
   }
 })
 
-const clearError = (field) => {
+function clearError(field) {
   errors.value[field] = ''
 }
 
-import validator from 'validator'
-
-// ... existing code ...
-
-const validateEmail = (email) => {
+function validateEmail(email) {
   return validator.isEmail(email)
 }
 
 const globalError = ref('')
 
-const handleLogin = async () => {
+async function handleLogin() {
   // Reset errors
   errors.value.email = ''
   errors.value.password = ''
@@ -96,22 +97,22 @@ const handleLogin = async () => {
     const user = await authService.login(form.value.email, form.value.password)
     
     // 登录成功后清除临时缓存
-    await cache.removeWithTTL('login_form_cache')
+    await cache.removeWithTTL(LOGIN_FORM_CACHE_KEY)
 
     // 记住账号逻辑：
     // 如果勾选了记住账号，保存邮箱和加密后的密码
     if (rememberAccount.value) {
-      await cache.set('remembered_account', {
+      await cache.set(REMEMBER_ACCOUNT_KEY, {
         email: form.value.email,
         password: form.value.password
       })
     } else {
-      await cache.remove('remembered_account')
+      await cache.remove(REMEMBER_ACCOUNT_KEY)
     }
     
     emit('login-success', user)
   } catch (error) {
-    console.error('Login failed:', error)
+    console.error('[FastFlow] Login failed:', error)
     // 区分错误类型
     if (error.message.includes('Failed to fetch')) {
       globalError.value = '无法连接到服务器，请检查网络或稍后重试'
@@ -123,7 +124,7 @@ const handleLogin = async () => {
   }
 }
 
-const goToRegister = () => {
+function goToRegister() {
   emit('navigate', 'register')
 }
 </script>

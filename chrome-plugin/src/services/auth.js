@@ -1,15 +1,18 @@
+import { cache } from '@/utils/cache.js'
 import { CONFIG } from '@/config/index.js'
 import CryptoJS from 'crypto-js'
-import { cache } from '@/utils/cache.js'
 
 // 使用 config 中定义的 API_BASE_URL
 const BASE_URL = CONFIG.API_BASE_URL
 const PASSWORD_SECRET_KEY = CONFIG.PASSWORD_SECRET_KEY // 与后端保持一致
-const AUTH_EXPIRED_EVENT = 'auth-expired'
+export const AUTH_EXPIRED_EVENT = 'auth-expired'
+export const AUTHORIZATION_KEY = 'Authorization'
+export const USER_INFO_KEY = 'userInfo'
+
 // 统一清理本地认证信息
 function clearAuthStorage() {
-  cache.remove('Authorization')
-  cache.remove('userInfo')
+  cache.remove(AUTHORIZATION_KEY)
+  cache.remove(USER_INFO_KEY)
 }
 
 // 通知登录过期（供 UI 做跳转）
@@ -56,18 +59,18 @@ export const authService = {
       const { token, userInfo } = result.data
       
       // 存储到 chrome.storage.local（由 cache.js 统一入口兜底）
-      await cache.set('Authorization', token)
-      await cache.set('userInfo', userInfo)
+      await cache.set(AUTHORIZATION_KEY, token)
+      await cache.set(USER_INFO_KEY, userInfo)
       
       return userInfo
     } catch (error) {
-      console.error('Login Error:', error)
+      console.error('[FastFlow] Login error:', error)
       throw error
     }
   },
 
   async checkLogin() {
-    const token = await cache.get('Authorization')
+    const token = await cache.get(AUTHORIZATION_KEY)
     if (!token) {
       const err = new Error('Missing token')
       err.status = 401
@@ -123,11 +126,11 @@ export const authService = {
   },
 
   async getCurrentUser() {
-    return await cache.get('userInfo')
+    return await cache.get(USER_INFO_KEY)
   },
   
   async getToken() {
-    return await cache.get('Authorization')
+    return await cache.get(AUTHORIZATION_KEY)
   },
 
   getAuthExpiredEventName() {

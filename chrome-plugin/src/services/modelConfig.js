@@ -1,8 +1,8 @@
-import { CONFIG } from '@/config/index.js'
 import { authService } from '@/services/auth.js'
+import { CONFIG } from '@/config/index.js'
 
 // 获取模型配置列表（需要登录）
-export const getModelConfigs = async () => {
+export async function getModelConfigs() {
   try {
     const token = await authService.getToken()
     const response = await fetch(`${CONFIG.API_BASE_URL}/fastflow/api/v1/model_config/list`, {
@@ -18,7 +18,7 @@ export const getModelConfigs = async () => {
     }
     return result.data || []
   } catch (error) {
-    console.error('[FastFlow] get model config list failed:', error)
+    console.error('[FastFlow] Get model config list failed:', error)
     return []
   }
 }

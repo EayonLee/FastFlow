@@ -1,6 +1,6 @@
-import { cache } from '@/utils/cache.js'
-import { authService } from '@/services/auth.js'
 import { CONFIG } from '@/config/index.js'
+import { AUTHORIZATION_KEY, authService } from '@/services/auth.js'
+import { cache } from '@/utils/cache.js'
 
 /**
  * 统一登录态守卫
@@ -22,15 +22,15 @@ export function createAuthGuard(options = {}) {
   let authed = null
 
   // 统一设置登录态，避免重复触发
-  const setAuthed = (val) => {
+  function setAuthed(val) {
     if (authed === val) return
     authed = val
     if (onAuthedChange) onAuthedChange(val)
   }
 
   // 统一校验逻辑：无 token 直接判定未登录；有 token 则服务端校验
-  const verify = async () => {
-    const token = await cache.get('Authorization')
+  async function verify() {
+    const token = await cache.get(AUTHORIZATION_KEY)
     if (!token) {
       setAuthed(false)
       return false
@@ -46,12 +46,12 @@ export function createAuthGuard(options = {}) {
     }
   }
 
-  const handleAuthExpired = () => {
+  function handleAuthExpired() {
     setAuthed(false)
   }
 
   // 启动守卫（幂等）
-  const start = async () => {
+  async function start() {
     await verify()
 
     if (!timer) {
@@ -62,7 +62,7 @@ export function createAuthGuard(options = {}) {
 
     if (!unsubscribe) {
       unsubscribe = cache.onChanged((changes) => {
-        const authChange = changes?.Authorization
+        const authChange = changes?.[AUTHORIZATION_KEY]
         if (!authChange) return
 
         if (!authChange.newValue) {
@@ -79,7 +79,7 @@ export function createAuthGuard(options = {}) {
   }
 
   // 停止守卫
-  const stop = () => {
+  function stop() {
     if (timer) {
       clearInterval(timer)
       timer = null

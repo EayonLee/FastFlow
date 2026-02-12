@@ -18,9 +18,9 @@ export class ThemeManager {
     this.mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     this.mediaQuery.addEventListener('change', () => {
       if (this.currentTheme === 'system') {
-        this.refresh();
+        this.refresh()
       }
-    });
+    })
 
     this.ready = this.init()
   }
@@ -63,14 +63,14 @@ export class ThemeManager {
 
   resolveTheme() {
     if (this.currentTheme === 'system') {
-      return this.mediaQuery.matches ? 'dark' : 'light';
+      return this.mediaQuery.matches ? 'dark' : 'light'
     }
-    return this.currentTheme;
+    return this.currentTheme
   }
 
   applyTo(element) {
-    const resolved = this.resolveTheme();
-    element.setAttribute('data-theme', resolved);
+    const resolved = this.resolveTheme()
+    element.setAttribute('data-theme', resolved)
   }
 
   refresh() {
@@ -90,4 +90,4 @@ export class ThemeManager {
 }
 
 // 单例模式导出
-export const themeManager = new ThemeManager();
+export const themeManager = new ThemeManager()

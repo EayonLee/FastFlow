@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { cache } from '@/utils/cache.js'
 import { authService } from '@/services/auth.js'
 import NeonButton from '@/components/NeonButton.vue'
-import { cache } from '@/utils/cache.js'
+import { onMounted, ref, watch } from 'vue'
+import validator from 'validator'
 
 const emit = defineEmits(['navigate'])
 
@@ -14,20 +15,21 @@ const form = ref({
   confirmPassword: ''
 })
 
+const REGISTER_FORM_CACHE_KEY = 'register_form_cache'
+const REGISTER_FORM_TTL = 5 * 60 * 1000
+
 // 监听表单变化并保存到 chrome.storage.local（临时缓存）
 watch(form, (newVal) => {
-  cache.setWithTTL('register_form_cache', newVal, 5 * 60 * 1000) // 5分钟过期
+  cache.setWithTTL(REGISTER_FORM_CACHE_KEY, newVal, REGISTER_FORM_TTL) // 5分钟过期
 }, { deep: true })
 
 onMounted(async () => {
   // 尝试恢复临时缓存
-  const cachedForm = await cache.getWithTTL('register_form_cache')
+  const cachedForm = await cache.getWithTTL(REGISTER_FORM_CACHE_KEY)
   if (cachedForm) {
     form.value = { ...form.value, ...cachedForm }
   }
 })
-
-
 
 const errors = ref({
   name: '',
@@ -41,19 +43,15 @@ const isLoading = ref(false)
 const codeTimer = ref(0)
 let timerInterval = null
 
-const clearError = (field) => {
+function clearError(field) {
   errors.value[field] = ''
 }
 
-import validator from 'validator'
-
-// ... existing code ...
-
-const validateEmail = (email) => {
+function validateEmail(email) {
   return validator.isEmail(email)
 }
 
-const startTimer = () => {
+function startTimer() {
   if (codeTimer.value > 0) return
   codeTimer.value = 60
   timerInterval = setInterval(() => {
@@ -65,7 +63,7 @@ const startTimer = () => {
   }, 1000)
 }
 
-const sendCode = () => {
+function sendCode() {
   errors.value.email = ''
   if (!form.value.email) {
     errors.value.email = '请输入邮箱'
@@ -76,13 +74,19 @@ const sendCode = () => {
   }
   
   // Mock send code
-  console.log('Sending code to', form.value.email)
+  console.info('[FastFlow] Sending code to', form.value.email)
   startTimer()
 }
 
-const handleRegister = async () => {
+function resetErrors() {
+  Object.keys(errors.value).forEach((key) => {
+    errors.value[key] = ''
+  })
+}
+
+async function handleRegister() {
   // Reset errors
-  Object.keys(errors.value).forEach(key => errors.value[key] = '')
+  resetErrors()
   
   let hasError = false
 
@@ -130,12 +134,12 @@ const handleRegister = async () => {
     })
     
     // 注册成功后清除缓存
-    await cache.removeWithTTL('register_form_cache')
+    await cache.removeWithTTL(REGISTER_FORM_CACHE_KEY)
 
     // 注册成功后跳转登录
     emit('navigate', 'login')
   } catch (error) {
-    console.error('Register failed:', error)
+    console.error('[FastFlow] Register failed:', error)
     // 这里简单处理，假设是邮箱被占用的错误，实际应根据后端返回
     errors.value.email = error.message || '注册失败'
   } finally {
@@ -143,7 +147,7 @@ const handleRegister = async () => {
   }
 }
 
-const goToLogin = () => {
+function goToLogin() {
   emit('navigate', 'login')
 }
 </script>
