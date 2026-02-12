@@ -46,6 +46,11 @@ public class ModelConfigVO {
     private String userGroupId;
 
     /**
+     * 排序值（越小越靠前）
+     */
+    private Integer sortOrder;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createdAt;

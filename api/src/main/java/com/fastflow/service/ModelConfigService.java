@@ -38,6 +38,9 @@ public class ModelConfigService extends ServiceImpl<ModelConfigMapper, ModelConf
 
         // 2. 转换为实体对象并保存
         ModelConfig modelConfig = BeanUtil.copyProperties(dto, ModelConfig.class);
+        if (modelConfig.getSortOrder() == null) {
+            modelConfig.setSortOrder(getNextSortOrder());
+        }
         this.save(modelConfig);
 
         return modelConfig.getId();
@@ -67,8 +70,10 @@ public class ModelConfigService extends ServiceImpl<ModelConfigMapper, ModelConf
         }
 
         // 3. 更新属性
+        Integer currentSortOrder = existingConfig.getSortOrder();
         BeanUtil.copyProperties(dto, existingConfig);
         existingConfig.setId(id);
+        existingConfig.setSortOrder(currentSortOrder);
 
         this.updateById(existingConfig);
     }
@@ -108,11 +113,25 @@ public class ModelConfigService extends ServiceImpl<ModelConfigMapper, ModelConf
      */
     public List<ModelConfigVO> getModelConfigList() {
         List<ModelConfig> list = this.list(new LambdaQueryWrapper<ModelConfig>()
-                .orderByDesc(ModelConfig::getUpdatedAt));
+                .orderByAsc(ModelConfig::getSortOrder));
 
         return list.stream()
                 .map(item -> BeanUtil.copyProperties(item, ModelConfigVO.class))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 获取下一个排序值（最大值 + 1）
+     */
+    private Integer getNextSortOrder() {
+        Integer max = this.lambdaQuery()
+                .select(ModelConfig::getSortOrder)
+                .orderByDesc(ModelConfig::getSortOrder)
+                .last("LIMIT 1")
+                .oneOpt()
+                .map(ModelConfig::getSortOrder)
+                .orElse(null);
+        return max == null ? 0 : max + 1;
     }
 
     /**

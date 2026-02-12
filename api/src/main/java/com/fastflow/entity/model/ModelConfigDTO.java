@@ -38,4 +38,5 @@ public class ModelConfigDTO {
      * 所属用户组ID
      */
     private String userGroupId;
+
 }
