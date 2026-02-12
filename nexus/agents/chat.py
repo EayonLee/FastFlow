@@ -69,7 +69,7 @@ class ChatAgent:
 
         # 处理流式响应
         async for chunk in runnable.astream(
-                # 占位符替换 用户输入和当前工作流上下文
+                # 占位符替换
                 {
                     "user_prompt": context.user_prompt,
                     "current_graph": graph_json

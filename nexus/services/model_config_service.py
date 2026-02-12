@@ -8,6 +8,8 @@ from pydantic import BaseModel
 # 获取全局配置
 settings = get_config()
 logger = get_logger(__name__)
+SUCCESS_CODES = {0, 200}
+MODEL_CONFIG_PATH = "/fastflow/api/v1/model_config/{}"
 
 
 class ModelConfig(BaseModel):
@@ -15,6 +17,17 @@ class ModelConfig(BaseModel):
     base_url: Optional[str] = None
     model_id: Optional[str] = None
     api_mode: Optional[str] = None
+
+
+def _build_headers(auth_token: Optional[str]) -> dict[str, str]:
+    if not auth_token:
+        return {}
+    return {"Authorization": auth_token}
+
+
+def _is_success(code: object) -> bool:
+    return code in SUCCESS_CODES
+
 
 def fetch_model_config(model_config_id: int, auth_token: Optional[str] = None) -> Optional[ModelConfig]:
     """
@@ -28,44 +41,47 @@ def fetch_model_config(model_config_id: int, auth_token: Optional[str] = None) -
         ModelConfig 对象，如果获取失败则返回 None
     """
     # 获取模型配置信息
-    url = f"{settings.FASTFLOW_API_URL}/fastflow/api/v1/model_config/{model_config_id}"
-    headers = {}
-    
-    # 转发认证 Token
-    if auth_token:
-        headers["Authorization"] = auth_token
-        
+    url = f"{settings.FASTFLOW_API_URL}{MODEL_CONFIG_PATH.format(model_config_id)}"
     try:
         # 使用同步请求，显式禁用代理（避免 VPN/系统代理干扰本地请求）
         with httpx.Client(trust_env=False) as client:
-            response = client.get(url, headers=headers, timeout=5.0)
+            response = client.get(
+                url,
+                headers=_build_headers(auth_token),
+                timeout=5.0,
+            )
         response.raise_for_status()
         data = response.json()
-        
-        if data.get("code") == 200 or data.get("code") == 0:
-            result = data.get("data", {})
-            encrypted_key = result.get("apiKey")
-            api_key = _decrypt_key(encrypted_key)
-            
-            if not api_key:
-                 return None
 
-            logger.debug(f"Successfully fetched Model Config for model_config_id: {model_config_id}")
-            return ModelConfig(
-                api_key=api_key,
-                base_url=result.get("apiBase"),
-                model_id=result.get("modelId"),
-                api_mode=result.get("apiMode")
-            )
-        else:
-            error_msg = data.get('message', 'Unknown Error')
-            logger.error(f"Failed to fetch Model Config for id {model_config_id}, Error: {error_msg}")
+        if not _is_success(data.get("code")):
+            error_msg = data.get("message", "Unknown Error")
+            logger.error("Failed to fetch Model Config for id %s, error: %s", model_config_id, error_msg)
             raise BusinessError(f"获取模型配置失败: {error_msg}")
-            
+
+        result = data.get("data", {})
+        api_key = _decrypt_key(result.get("apiKey"))
+        if not api_key:
+            return None
+
+        logger.debug("Successfully fetched Model Config for model_config_id: %s", model_config_id)
+        return ModelConfig(
+            api_key=api_key,
+            base_url=result.get("apiBase"),
+            model_id=result.get("modelId"),
+            api_mode=result.get("apiMode"),
+        )
     except BusinessError:
         raise
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            "Error fetching Model Config for id %s, status=%s body=%s",
+            model_config_id,
+            e.response.status_code,
+            e.response.text,
+        )
+        raise BusinessError(f"获取模型配置时发生错误: {str(e)}")
     except Exception as e:
-        logger.error(f"Error fetching Model Config for id {model_config_id}: {e}")
+        logger.error("Error fetching Model Config for id %s: %s", model_config_id, e)
         raise BusinessError(f"获取模型配置时发生错误: {str(e)}")
 
 def _decrypt_key(encrypted_key: str) -> str:

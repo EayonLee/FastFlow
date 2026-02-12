@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import AsyncGenerator, Awaitable, Callable, Dict, List, Optional
+from typing import AsyncGenerator, Dict, List, Optional
 
 from nexus.common.exceptions import BusinessError
 from nexus.core.schemas import BuilderContext, Operation, LogicalGraph
@@ -15,6 +15,11 @@ from langgraph.graph import StateGraph, END
 from typing_extensions import TypedDict
 
 logger = get_logger(__name__)
+SSE_DONE = "data: [DONE]\n\n"
+
+
+def _to_sse(payload: Dict[str, object]) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 class BuilderFlowState(TypedDict):
@@ -28,8 +33,6 @@ class BuilderFlowState(TypedDict):
     operations: List[Operation]
     # 错误信息，非空则流程提前结束
     error: Optional[str]
-    # 统一 SSE 输出的回调
-    emit: Callable[[str], Awaitable[None]]
 
 class AgentService:
     """
@@ -53,16 +56,21 @@ class AgentService:
         try:
             # 调用 ChatAgent 处理流式对话, 并将每个 chunk 包装为 SSE 格式
             async for chunk in self.chat_agent.achat(context):
-                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk}, ensure_ascii=False)}\n\n"
+                yield _to_sse({"type": "chunk", "content": chunk})
         except BusinessError as e:
-            logger.error(f"ChatAgent error: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'message': e.message}, ensure_ascii=False)}\n\n"
+            logger.error("ChatAgent error: %s", e)
+            yield _to_sse({"type": "error", "message": e.message})
         except Exception as e:
-            logger.error(f"ChatAgent error with session_id: {context.session_id}, user_prompt: {context.user_prompt}, error: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
+            logger.error(
+                "ChatAgent error with session_id: %s, user_prompt: %s, error: %s",
+                context.session_id,
+                context.user_prompt,
+                e,
+            )
+            yield _to_sse({"type": "error", "message": str(e)})
 
         # 发送 SSE 结束信号
-        yield "data: [DONE]\n\n"
+        yield SSE_DONE
 
 
     async def handle_builder_request(self, context: BuilderContext) -> AsyncGenerator[str, None]:
@@ -72,7 +80,7 @@ class AgentService:
 
         async def emit_event(payload: Dict[str, object]):
             # 统一 SSE 数据格式
-            await queue.put(f"data: {json.dumps(payload, ensure_ascii=False)}\n\n")
+            await queue.put(_to_sse(payload))
 
         async def emit_chunk(content: str):
             # 输出模型流式思考
@@ -313,14 +321,13 @@ class AgentService:
                         "plan": None,
                         "operations": [],
                         "error": None,
-                        "emit": emit_event,
                     }
                 )
             except Exception as exc:
                 logger.error("BuilderAgent flow - error: %s", exc)
                 await emit_error(str(exc))
             finally:
-                await queue.put("data: [DONE]\n\n")
+                await queue.put(SSE_DONE)
 
         # 启动异步任务
         task = asyncio.create_task(run_flow())
@@ -329,7 +336,7 @@ class AgentService:
             # 按顺序把事件流发送出去
             message = await queue.get()
             yield message
-            if message == "data: [DONE]\n\n":
+            if message == SSE_DONE:
                 break
 
         await task
