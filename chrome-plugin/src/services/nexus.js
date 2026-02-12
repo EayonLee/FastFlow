@@ -5,11 +5,11 @@ import { Logger } from '@/utils/logger.js'
 /**
  * 生成工作流（调用 Nexus 的流式接口）
  * @param {Object} params - 请求参数
- * @param {string} params.agentType - 智能体类型（chat 或 builder）
+ * @param {string} params.mode - 智能体类型（chat 或 builder）
  * @param {string} params.prompt - 用户输入的提示词
  * @param {string} params.sessionId - 会话 ID
  * @param {number} params.modelConfigId - 模型配置 ID（后端要求为数字）
- * @param {Object} params.currentGraph - 当前画布的图结构（nodes/edges）
+ * @param {Object|null} params.workflowGraph - 当前画布的图结构（所有模式都传递）
  * @param {Function|null} onChunk - 流式内容回调（目前后端未返回 content，可为空）
  * @param {Function} onComplete - 成功回调（返回最终 graph）
  * @param {Function} onError - 错误回调（返回 Error）
@@ -19,13 +19,13 @@ async function generateWorkflow(params, onChunk, onComplete, onError) {
     // 读取登录凭证（Nexus 接口需要 Authorization）
     const token = await authService.getToken() || ''
 
-    // 组装请求体，字段名需与后端 BuilderContext 对齐
+    // 组装请求体，字段名需与后端 AgentRequestContext 对齐
     const body = {
-      agent_type: params.agentType,
+      mode: params.mode,
       user_prompt: params.prompt,
       session_id: params.sessionId,
       model_config_id: params.modelConfigId,
-      current_graph: params.currentGraph
+      workflow_graph: params.workflowGraph
     }
 
     // 发起请求（Nexus SSE 流式接口）
@@ -91,7 +91,7 @@ async function generateWorkflow(params, onChunk, onComplete, onError) {
       onComplete(finalGraph)
     } else {
       // Chat 不返回图；Builder 必须有图
-      if (params.agentType === 'builder') {
+      if (params.mode === 'builder') {
         onError(new Error('未收到 Nexus 返回的有效图数据'))
       } else {
         onComplete(null)

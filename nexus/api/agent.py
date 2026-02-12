@@ -3,7 +3,7 @@ from typing import AsyncGenerator
 
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import StreamingResponse
-from nexus.core.schemas import BuilderContext
+from nexus.core.schemas import ChatRequestContext
 from nexus.services.agent_service import AgentService
 from nexus.common.dependencies import get_agent_service
 from nexus.config.logger import get_logger
@@ -28,14 +28,14 @@ async def _safe_stream(stream: AsyncGenerator[str, None]) -> AsyncGenerator[str,
 
 @router.post("/chat/completions")
 async def chat_completions(
-    context: BuilderContext, 
+    context: ChatRequestContext,
     request: Request,
     agent_service: AgentService = Depends(get_agent_service)
 ):
     """
     统一的智能体对话接口 
     支持流式响应
-    根据 context.agent_type ("chat" | "builder") 分流处理不同智能体类型的请求。
+    根据 context.mode ("chat" | "builder") 分流处理不同智能体类型的请求。
     """
     context.auth_token = request.headers.get("Authorization")
     # 登录校验
@@ -44,10 +44,10 @@ async def chat_completions(
     if not check_login(context.auth_token):
         raise AuthError("Current user is not logged in")
 
-    # 校验 agent_type 是否有效
-    if context.agent_type not in ["chat", "builder"]:
-        logger.error(f"Invalid agent_type: {context.agent_type}")
-        raise ParmasValidationError(f"Invalid agent type: {context.agent_type}")
+    # 校验 mode 是否有效
+    if context.mode not in ["chat", "builder"]:
+        logger.error("Invalid agent mode: %s", context.mode)
+        raise ParmasValidationError(f"Invalid agent mode: {context.mode}")
 
     # 校验 model_config_id 是否存在
     if not context.model_config_id:
@@ -58,19 +58,15 @@ async def chat_completions(
     if not context.user_prompt:
         raise ParmasValidationError("user_prompt is required")
     
-    # 校验 current_graph 是否存在
-    if not context.current_graph:
-        raise ParmasValidationError("current_graph is required")
-    
     # 校验 session_id 是否存在
     if not context.session_id:
         raise ParmasValidationError("session_id is required")
 
     logger.info(
-        f"Received {context.agent_type} agent request with model_config_id: {context.model_config_id}, user_prompt: {context.user_prompt}")
+        f"Received {context.mode} agent request with model_config_id: {context.model_config_id}, user_prompt: {context.user_prompt}")
 
     # Chat Agent
-    if context.agent_type == "chat":
+    if context.mode == "chat":
         return StreamingResponse(
             _safe_stream(agent_service.handle_chat_request(context)),
             media_type="text/event-stream"

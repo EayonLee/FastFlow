@@ -254,10 +254,11 @@ async function handleGenerate() {
   messages.value.push(createMessage('', 'ai', { id: loadingMsgId, isLoading: true }))
   scrollToBottom()
 
-  // 5) 获取当前工作流 JSON 配置
-  let currentGraph = null
+  const isChatAgent = selectedAgent.value === 'chat'
+  // 5) 所有模式都获取当前工作流 JSON 配置并传给后端
+  let workflowGraph = null
   try {
-    currentGraph = await Bridge.getCurrentGraph()
+    workflowGraph = await Bridge.getCurrentGraph()
   } catch (e) {
     setMessageError(loadingMsgId, `获取当前编排失败：\n${e.message}`)
     // 终止本次发送
@@ -266,15 +267,14 @@ async function handleGenerate() {
   }
 
   // 6) 调用 Nexus（SSE 流式）
-  const isChatAgent = selectedAgent.value === 'chat'
   Nexus.generateWorkflow(
     {
       // 请求参数：prompt + 选中的 agent + 模型 + 会话 + 当前画布
       prompt,
-      agentType: selectedAgent.value,
+      mode: selectedAgent.value,
       modelConfigId: selectedModel.value,
       sessionId: sessionId.value,
-      currentGraph
+      workflowGraph
     },
     (chunk) => {
       // Chat/Builder 的流式文本统一追加到消息里
