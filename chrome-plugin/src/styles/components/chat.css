@@ -228,6 +228,10 @@
     position: relative;
 }
 
+#fastflow-copilot-container .msg-body span {
+    white-space: pre-wrap; /* 保证消息内容中的 \n 在 span 内也能生效 */
+}
+
 .message-wrapper.ai .msg-body {
     background: var(--bg-app); /* Darker surface */
     border: 1px solid var(--border-subtle);

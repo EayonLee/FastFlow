@@ -10,12 +10,18 @@ import { Nexus } from '@/services/nexus.js'
 import { createAuthGuard } from '@/utils/authGuard.js'
 import { getModelConfigs } from '@/services/modelConfig.js'
 import { Layout } from '@/utils/layout.js'
+import { formatDateTime } from '@/utils/time.js'
 import { generateUuid32 } from '@/utils/uuid.js'
 
 // 存储 key（用于记住聊天框尺寸）
 const CHAT_SIZE_STORAGE_KEY = 'chat_box_size'
 // 默认欢迎语
-const WELCOME_MESSAGE = 'Hi 我是 NEXUS，你的智能工作流助手。告诉我你想要什么样的工作流吧！'
+const WELCOME_MESSAGE = 'Hi！👋\n' +
+    '我是 Nexus，FastFlow 工作流智能助手，可以随时帮你优化或讲解工作流。\n\n' +
+    '😎需要我帮你做什么？'
+// 输入框行数约束
+const MIN_INPUT_ROWS = 3
+const MAX_INPUT_ROWS = 6
 
 /**
  * 聊天视图组件
@@ -30,6 +36,8 @@ const WELCOME_MESSAGE = 'Hi 我是 NEXUS，你的智能工作流助手。告诉�
 const isOpen = ref(false)
 // 输入框内容
 const inputValue = ref('')
+// 输入框行数（默认 3 行，最多 6 行）
+const inputRows = ref(MIN_INPUT_ROWS)
 // 登录状态（未登录时隐藏小球和聊天框）
 const isAuthed = ref(false)
 let authGuard = null
@@ -54,7 +62,7 @@ const messages = ref([
     id: generateUuid32(),
     type: 'ai', 
     content: WELCOME_MESSAGE,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    timestamp: formatDateTime(new Date())
   }
 ])
 // 复制反馈逻辑（控制复制按钮图标切换）
@@ -86,7 +94,7 @@ function createMessage(content, type, extra = {}) {
     id: generateUuid32(),
     type,
     content,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    timestamp: formatDateTime(new Date()),
     ...extra
   }
 }
@@ -192,6 +200,16 @@ function closeChat() {
   isOpen.value = false
 }
 
+// 计算输入框行数（默认 3 行，最多 6 行）
+function updateInputRows() {
+  const value = inputValue.value || ''
+  const lineCount = value.split('\n').length
+  const nextRows = Math.max(MIN_INPUT_ROWS, Math.min(MAX_INPUT_ROWS, lineCount))
+  if (inputRows.value !== nextRows) {
+    inputRows.value = nextRows
+  }
+}
+
 // 滚动到底部
 function scrollToBottom() {
   nextTick(() => {
@@ -228,6 +246,7 @@ async function handleGenerate() {
   // 3) 添加用户消息
   addMessage(prompt, 'user')
   inputValue.value = ''
+  inputRows.value = MIN_INPUT_ROWS
   isLoading.value = true
 
   // 4) 显示加载中消息（用于流式更新）
@@ -274,10 +293,10 @@ async function handleGenerate() {
       // Builder 成功回调 - 更新同一条消息
       const targetMsg = findMessage(loadingMsgId)
       if (targetMsg) {
-          targetMsg.isLoading = false
-          targetMsg.content = `✅ 生成成功！包含 ${graphData.nodes.length} 个节点。正在排版...`
-          // 内容更新后，重新滚动到底部
-          scrollToBottom()
+        targetMsg.isLoading = false
+        targetMsg.content = `✅ 生成成功！包含 ${graphData.nodes.length} 个节点。正在排版...`
+        // 内容更新后，重新滚动到底部
+        scrollToBottom()
       }
       
       try {
@@ -286,30 +305,30 @@ async function handleGenerate() {
         
         // 发送渲染请求给页面
         Bridge.sendRenderRequest(
-            layoutedGraph,
-            () => {
-                if (targetMsg) {
-                    // 渲染成功提示
-                    targetMsg.content = '🎉 新画布渲染成功！'
-                    scrollToBottom()
-                }
-                isLoading.value = false
-            },
-            () => {
-                // 失败回调：仅提示错误，不做降级方案
-                if (targetMsg) {
-                    // 渲染失败提示
-                    targetMsg.content = '新画布渲染失败：未能将编排应用到页面，请检查页面是否处于可编辑状态。'
-                    scrollToBottom()
-                }
-                isLoading.value = false
+          layoutedGraph,
+          () => {
+            if (targetMsg) {
+              // 渲染成功提示
+              targetMsg.content = '🎉 新画布渲染成功！'
+              scrollToBottom()
             }
+            isLoading.value = false
+          },
+          () => {
+            // 失败回调：仅提示错误，不做降级方案
+            if (targetMsg) {
+              // 渲染失败提示
+              targetMsg.content = '新画布渲染失败：未能将编排应用到页面，请检查页面是否处于可编辑状态。'
+              scrollToBottom()
+            }
+            isLoading.value = false
+          }
         )
       } catch (e) {
         if (targetMsg) {
-            // 布局或渲染过程中异常
-            targetMsg.isLoading = false
-            targetMsg.content = `Formatting or Rendering Error: \n${e.message}`
+          // 布局或渲染过程中异常
+          targetMsg.isLoading = false
+          targetMsg.content = `Formatting or Rendering Error: \n${e.message}`
         }
         isLoading.value = false
       }
@@ -328,7 +347,7 @@ function handleKeydown(e) {
     e.preventDefault()
     // 仅在非加载状态且有内容时发送
     if (!isLoading.value && inputValue.value.trim()) {
-        handleGenerate()
+      handleGenerate()
     }
   }
 }
@@ -369,27 +388,27 @@ function handleKeydown(e) {
             :class="msg.type"
           >
             <div class="message-content-box">
-                <div class="msg-header">
-                    <span class="role-name">{{ msg.type === 'user' ? 'You' : 'NEXUS' }}</span>
-                    <span class="msg-time">{{ msg.timestamp }}</span>
-                    <button 
-                      v-if="!msg.isLoading && msg.content" 
-                      class="copy-btn" 
-                      @click="copyMessage(msg.content, msg.id)"
-                      title="复制内容"
-                    >
-                      <Check v-if="copiedMap.get(msg.id)" size="12" />
-                      <Copy v-else size="12" />
-                    </button>
+              <div class="msg-header">
+                <span class="role-name">{{ msg.type === 'user' ? 'You' : 'NEXUS' }}</span>
+                <span class="msg-time">{{ msg.timestamp }}</span>
+                <button 
+                  v-if="!msg.isLoading && msg.content" 
+                  class="copy-btn" 
+                  @click="copyMessage(msg.content, msg.id)"
+                  title="复制内容"
+                >
+                  <Check v-if="copiedMap.get(msg.id)" size="12" />
+                  <Copy v-else size="12" />
+                </button>
+              </div>
+              <div class="msg-body">
+                <div v-if="msg.isLoading" class="typing-indicator">
+                  <div class="typing-dot"></div>
+                  <div class="typing-dot"></div>
+                  <div class="typing-dot"></div>
                 </div>
-                  <div class="msg-body">
-                    <div v-if="msg.isLoading" class="typing-indicator">
-                        <div class="typing-dot"></div>
-                        <div class="typing-dot"></div>
-                        <div class="typing-dot"></div>
-                    </div>
-                    <span v-else>{{ msg.content }}</span>
-                  </div>
+                <span v-else>{{ msg.content }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -402,7 +421,8 @@ function handleKeydown(e) {
               v-model="inputValue"
               id="fastflow-input"
               placeholder="有问题，尽管问" 
-              rows="3"
+              :rows="inputRows"
+              @input="updateInputRows"
               @keydown="handleKeydown"
             ></textarea>
             
