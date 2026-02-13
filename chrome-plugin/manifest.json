@@ -27,7 +27,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["src/inject/index.js"],
+      "resources": ["src/inject/index.js", "src/utils/workflowGraph.js"],
       "matches": ["<all_urls>"]
     }
   ],

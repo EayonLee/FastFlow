@@ -19,6 +19,14 @@
   --accent-neon-glow: 0 0 15px rgba(0, 255, 65, 0.4);
   
   --danger: #ff3333;
+  --code-block-bg: rgba(255, 255, 255, 0.04);
+  --code-block-border: rgba(255, 255, 255, 0.12);
+  --code-block-text: #e8edf2;
+  --code-token-key: #9cdcfe;
+  --code-token-string: #ce9178;
+  --code-token-number: #b5cea8;
+  --code-token-boolean: #569cd6;
+  --code-token-null: #dcdcaa;
   
   /* 布局尺寸 */
   --sidebar-width: 280px;
@@ -61,4 +69,12 @@
   --accent-neon-glow: 0 0 15px rgba(16, 185, 129, 0.25);
   
   --danger: #ef4444;
+  --code-block-bg: #f3f6f9;
+  --code-block-border: rgba(15, 23, 42, 0.12);
+  --code-block-text: #0f172a;
+  --code-token-key: #0f4c81;
+  --code-token-string: #8b2c2c;
+  --code-token-number: #7c3aed;
+  --code-token-boolean: #b45309;
+  --code-token-null: #6b7280;
 }

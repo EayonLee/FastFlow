@@ -1,27 +1,28 @@
+import json
+from json import JSONDecodeError
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic.config import ConfigDict
 
 
 class NodeInstance(BaseModel):
     """
-    图中节点的具体实例。
+    前端导出中的节点对象。
     """
 
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    model_config = ConfigDict(extra="allow")
 
-    id: str = Field(..., description="唯一的实例 ID", alias="nodeId")
-    type: str = Field(..., description="节点类型", alias="flowNodeType")
-    data: Dict[str, Any] = Field(default_factory=dict, description="节点完整结构")
+    node_id: str = Field(..., description="唯一的节点 ID", alias="nodeId")
+    flow_node_type: str = Field(..., description="节点类型", alias="flowNodeType")
 
 
 class EdgeInstance(BaseModel):
     """
-    两个节点之间的连接。
+    前端导出中的边对象。
     """
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(extra="allow")
 
     source: str = Field(..., description="源节点 ID")
     target: str = Field(..., description="目标节点 ID")
@@ -31,8 +32,37 @@ class EdgeInstance(BaseModel):
 
 class WorkflowGraph(BaseModel):
     """
-    工作流图的逻辑表示（仅拓扑结构）。
+    工作流图（与前端导出结构对齐）：nodes / edges / chatConfig。
     """
+
+    model_config = ConfigDict(extra="allow")
 
     nodes: List[NodeInstance] = Field(default_factory=list)
     edges: List[EdgeInstance] = Field(default_factory=list)
+    chat_config: Dict[str, Any] = Field(default_factory=dict, alias="chatConfig")
+
+    @model_validator(mode="before")
+    @classmethod
+    def parse_raw_export(cls, value: Any) -> Any:
+        """
+        允许 workflow_graph 直接接收前端导出的 JSON 字符串。
+        """
+        if value is None:
+            return None
+
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return {"nodes": [], "edges": [], "chatConfig": {}}
+            try:
+                parsed = json.loads(text)
+            except JSONDecodeError as exc:
+                raise ValueError("workflow_graph is not valid JSON") from exc
+            if not isinstance(parsed, dict):
+                raise ValueError("workflow_graph JSON must be an object")
+            return parsed
+
+        if hasattr(value, "model_dump"):
+            return value.model_dump(by_alias=True)
+
+        return value

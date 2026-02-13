@@ -9,7 +9,7 @@ import { Logger } from '@/utils/logger.js'
  * @param {string} params.prompt - 用户输入的提示词
  * @param {string} params.sessionId - 会话 ID
  * @param {number} params.modelConfigId - 模型配置 ID（后端要求为数字）
- * @param {Object|null} params.workflowGraph - 当前画布的图结构（所有模式都传递）
+ * @param {string|null} params.workflowGraph - 当前画布导出的原始 JSON 字符串（所有模式都传递）
  * @param {Function|null} onChunk - 流式内容回调（目前后端未返回 content，可为空）
  * @param {Function} onComplete - 成功回调（返回最终 graph）
  * @param {Function} onError - 错误回调（返回 Error）

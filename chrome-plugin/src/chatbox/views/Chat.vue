@@ -5,12 +5,14 @@ import FlowSelect from '@/components/FlowSelect.vue'
 import Header from '@/components/Header.vue'
 import { useCopyFeedback } from '@/composables/useCopyFeedback.js'
 import { useResizable } from '@/composables/useResizable.js'
+import { useStreamTypewriter } from '@/composables/useStreamTypewriter.js'
 import { Bridge } from '@/services/bridge.js'
 import { Nexus } from '@/services/nexus.js'
 import { createAuthGuard } from '@/utils/authGuard.js'
 import { getModelConfigs } from '@/services/modelConfig.js'
 import { Layout } from '@/utils/layout.js'
 import { formatDateTime } from '@/utils/time.js'
+import { renderMarkdown } from '@/utils/markdown.js'
 import { generateUuid32 } from '@/utils/uuid.js'
 
 // 存储 key（用于记住聊天框尺寸）
@@ -88,6 +90,19 @@ const resizer = useResizable(containerRef, {
   storageKey: CHAT_SIZE_STORAGE_KEY
 })
 
+// 流式打字机渲染（将 chunk 按字符节奏展示）
+const streamTypewriter = useStreamTypewriter({
+  charsPerTick: 1,
+  intervalMs: 16,
+  onText: (id, text) => {
+    updateMessage(id, (target) => {
+      if (target.isLoading) target.isLoading = false
+      target.content = `${target.content || ''}${text}`
+    })
+    scrollToBottom()
+  }
+})
+
 // 创建消息对象（统一时间格式）
 function createMessage(content, type, extra = {}) {
   return {
@@ -114,6 +129,8 @@ function updateMessage(id, updater) {
 
 // 写入错误消息并滚动到底部
 function setMessageError(id, message) {
+  // 出错时先清理该消息未输出完的流式队列
+  streamTypewriter.clear(id)
   updateMessage(id, (target) => {
     target.isLoading = false
     target.content = message
@@ -124,11 +141,7 @@ function setMessageError(id, message) {
 // 将流式文本追加到指定消息
 function appendChunkToMessage(id, chunk) {
   if (!chunk) return
-  updateMessage(id, (target) => {
-    if (target.isLoading) target.isLoading = false
-    target.content = `${target.content || ''}${chunk}`
-  })
-  scrollToBottom()
+  streamTypewriter.enqueue(id, chunk)
 }
 
 onMounted(async () => {
@@ -150,6 +163,8 @@ onUnmounted(() => {
     authGuard.stop()
     authGuard = null
   }
+  // 清理流式打字机定时器
+  streamTypewriter.cleanup()
   resizer.cleanup()
 })
 
@@ -232,6 +247,11 @@ async function copyMessage(content, messageId) {
   await copyText(content, messageId)
 }
 
+// 将消息文本渲染为 HTML（支持基础 Markdown）
+function renderMessageContent(content) {
+  return renderMarkdown(content || '')
+}
+
 // 发送消息处理逻辑
 async function handleGenerate() {
   // 1) 校验输入
@@ -255,12 +275,12 @@ async function handleGenerate() {
   scrollToBottom()
 
   const isChatAgent = selectedAgent.value === 'chat'
-  // 5) 所有模式都获取当前工作流 JSON 配置并传给后端
+  // 5) 所有模式都导出当前工作流配置原文并传给后端
   let workflowGraph = null
   try {
-    workflowGraph = await Bridge.getCurrentGraph()
+    workflowGraph = await Bridge.exportWorkflowGraph()
   } catch (e) {
-    setMessageError(loadingMsgId, `获取当前编排失败：\n${e.message}`)
+    setMessageError(loadingMsgId, `Export current workflow graph failed：${e.message}`)
     // 终止本次发送
     isLoading.value = false
     return
@@ -283,16 +303,21 @@ async function handleGenerate() {
     (graphData) => {
       // Chat 智能体不返回图，直接结束
       if (isChatAgent) {
-        updateMessage(loadingMsgId, (target) => {
-          if (target.isLoading) target.isLoading = false
+        // 等待所有 chunk 渲染完成后再结束 loading
+        streamTypewriter.drain(loadingMsgId).then(() => {
+          updateMessage(loadingMsgId, (target) => {
+            if (target.isLoading) target.isLoading = false
+          })
+          isLoading.value = false
         })
-        isLoading.value = false
         return
       }
 
       // Builder 成功回调 - 更新同一条消息
       const targetMsg = findMessage(loadingMsgId)
       if (targetMsg) {
+        // Builder 成功后清理流式队列，防止旧文本继续追加
+        streamTypewriter.clear(loadingMsgId)
         targetMsg.isLoading = false
         targetMsg.content = `✅ 生成成功！包含 ${graphData.nodes.length} 个节点。正在排版...`
         // 内容更新后，重新滚动到底部
@@ -407,7 +432,7 @@ function handleKeydown(e) {
                   <div class="typing-dot"></div>
                   <div class="typing-dot"></div>
                 </div>
-                <span v-else>{{ msg.content }}</span>
+                <div v-else class="msg-markdown" v-html="renderMessageContent(msg.content)"></div>
               </div>
             </div>
           </div>

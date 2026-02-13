@@ -189,6 +189,7 @@
 #fastflow-copilot-container .message-wrapper {
     display: flex;
     flex-direction: column;
+    width: fit-content;
     max-width: 85%;
     animation: slideIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
     /* 移除之前的 hack margin，使用标准的 padding 控制布局 */
@@ -201,8 +202,12 @@
 .message-content-box {
     display: flex;
     flex-direction: column;
+    width: fit-content;
+    max-width: 100%;
+    align-items: flex-start;
     gap: 6px;
 }
+.message-wrapper.user .message-content-box { align-items: flex-end; }
 
 .msg-header {
     display: flex;
@@ -215,11 +220,16 @@
 .message-wrapper.user .msg-header { flex-direction: row-reverse; }
 
 #fastflow-copilot-container .msg-body {
+    display: inline-block;
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
     padding: 10px 14px; /* 消息气泡内部文字边距 */
     border-radius: 12px;
     font-size: 14px;
     line-height: 1.5;
     word-wrap: break-word;
+    overflow-wrap: anywhere;
     white-space: pre-wrap !important; /* 强制保留换行符并自动换行，增加权重防止被覆盖 */
     user-select: text; /* 允许文本选择 */
     -webkit-user-select: text;
@@ -230,6 +240,165 @@
 
 #fastflow-copilot-container .msg-body span {
     white-space: pre-wrap; /* 保证消息内容中的 \n 在 span 内也能生效 */
+}
+
+#fastflow-copilot-container .msg-markdown {
+    white-space: normal;
+}
+
+#fastflow-copilot-container .msg-markdown p {
+    margin: 0;
+}
+
+#fastflow-copilot-container .msg-markdown p + p {
+    margin-top: 8px;
+}
+
+#fastflow-copilot-container .msg-markdown ul {
+    margin: 8px 0 0 18px;
+    padding: 0;
+}
+
+#fastflow-copilot-container .msg-markdown ol {
+    margin: 8px 0 0 22px;
+    padding: 0;
+}
+
+#fastflow-copilot-container .msg-markdown li {
+    margin: 4px 0;
+}
+
+#fastflow-copilot-container .msg-markdown h1,
+#fastflow-copilot-container .msg-markdown h2,
+#fastflow-copilot-container .msg-markdown h3,
+#fastflow-copilot-container .msg-markdown h4,
+#fastflow-copilot-container .msg-markdown h5,
+#fastflow-copilot-container .msg-markdown h6 {
+    margin: 10px 0 0;
+    line-height: 1.3;
+    font-weight: 700;
+}
+
+#fastflow-copilot-container .msg-markdown h1 { font-size: 18px; }
+#fastflow-copilot-container .msg-markdown h2 { font-size: 16px; }
+#fastflow-copilot-container .msg-markdown h3 { font-size: 15px; }
+#fastflow-copilot-container .msg-markdown h4,
+#fastflow-copilot-container .msg-markdown h5,
+#fastflow-copilot-container .msg-markdown h6 { font-size: 14px; }
+
+#fastflow-copilot-container .msg-markdown blockquote {
+    margin: 8px 0 0;
+    padding: 8px 10px;
+    border-left: 3px solid var(--border-subtle);
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+}
+
+#fastflow-copilot-container .msg-markdown blockquote p {
+    margin: 0;
+}
+
+#fastflow-copilot-container .msg-markdown blockquote p + p {
+    margin-top: 6px;
+}
+
+#fastflow-copilot-container .msg-markdown .msg-table-wrap {
+    margin-top: 10px;
+    width: 100%;
+    overflow-x: auto;
+}
+
+#fastflow-copilot-container .msg-markdown table.msg-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+#fastflow-copilot-container .msg-markdown table.msg-table th,
+#fastflow-copilot-container .msg-markdown table.msg-table td {
+    border: 1px solid var(--border-subtle);
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+}
+
+#fastflow-copilot-container .msg-markdown table.msg-table th {
+    background: rgba(255, 255, 255, 0.04);
+    font-weight: 700;
+}
+
+#fastflow-copilot-container .msg-markdown strong {
+    font-weight: 700;
+}
+
+#fastflow-copilot-container .msg-markdown code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+#fastflow-copilot-container .msg-markdown pre.msg-code-block {
+    margin: 8px 0 0 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--code-block-border);
+    background: var(--code-block-bg);
+    color: var(--code-block-text);
+    overflow-x: auto;
+}
+
+#fastflow-copilot-container .msg-markdown pre.msg-code-block code {
+    display: block;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre;
+}
+
+#fastflow-copilot-container .msg-markdown pre.msg-code-block code .token-key {
+    color: var(--code-token-key);
+}
+
+#fastflow-copilot-container .msg-markdown pre.msg-code-block code .token-string {
+    color: var(--code-token-string);
+}
+
+#fastflow-copilot-container .msg-markdown pre.msg-code-block code .token-number {
+    color: var(--code-token-number);
+}
+
+#fastflow-copilot-container .msg-markdown pre.msg-code-block code .token-boolean {
+    color: var(--code-token-boolean);
+}
+
+#fastflow-copilot-container .msg-markdown pre.msg-code-block code .token-null {
+    color: var(--code-token-null);
+}
+
+#fastflow-copilot-container .msg-markdown pre.msg-code-block code.hljs .hljs-attr,
+#fastflow-copilot-container .msg-markdown pre.msg-code-block code.hljs .hljs-property {
+    color: var(--code-token-key);
+}
+
+#fastflow-copilot-container .msg-markdown pre.msg-code-block code.hljs .hljs-string,
+#fastflow-copilot-container .msg-markdown pre.msg-code-block code.hljs .hljs-regexp {
+    color: var(--code-token-string);
+}
+
+#fastflow-copilot-container .msg-markdown pre.msg-code-block code.hljs .hljs-number {
+    color: var(--code-token-number);
+}
+
+#fastflow-copilot-container .msg-markdown pre.msg-code-block code.hljs .hljs-literal,
+#fastflow-copilot-container .msg-markdown pre.msg-code-block code.hljs .hljs-keyword {
+    color: var(--code-token-boolean);
 }
 
 .message-wrapper.ai .msg-body {

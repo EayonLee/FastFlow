@@ -2,22 +2,21 @@ from typing import Annotated, AsyncGenerator, List, Literal
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
+from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from typing_extensions import TypedDict
 
 from nexus.common.exceptions import BusinessError
-from nexus.config.logger import get_logger
-from nexus.core.llm import get_or_create_chat_model
+from nexus.core.llm import get_llm
 from nexus.core.memory.memory_manager import get_session_history
+from nexus.core.policies import resolve_tool_choice
 from nexus.core.prompts.chat_prompts import CHAT_SYSTEM_PROMPT
 from nexus.core.schemas import ChatRequestContext
 from nexus.core.tools import build_workflow_graph_tools
 
-logger = get_logger(__name__)
-
 class ChatState(TypedDict):
     # LangGraph 中的状态：messages 是增量追加的消息列表。
-    messages: Annotated[List[BaseMessage], "add_messages"]
+    messages: Annotated[List[BaseMessage], add_messages]
 
 
 class ChatAgent:
@@ -51,12 +50,13 @@ class ChatAgent:
 
         # 获取工作流工具
         tools, _ = build_workflow_graph_tools(context)
-        # 构建/复用 LLM，注入工具与鉴权信息。
-        llm = get_or_create_chat_model(config_id, context.auth_token, tools)
 
         def agent_node(state: ChatState):
             # 取出当前消息列表，调用模型生成响应。
             messages = state["messages"]
+            # 由策略层统一决定工具调用模式。
+            tool_choice = resolve_tool_choice(context, messages)
+            llm = get_llm(config_id, context.auth_token, tools, tool_choice=tool_choice)
             response = llm.invoke(messages)
             # 返回增量消息
             return {"messages": [response]}
@@ -100,6 +100,10 @@ class ChatAgent:
                 continue
             last_message = messages[-1]
             if not isinstance(last_message, AIMessage):
+                continue
+            # 若当前消息仍包含 tool_calls，说明还在工具调用阶段。
+            # 该阶段的解释性文本不展示给前端，避免中间内容与最终答案拼接。
+            if last_message.tool_calls:
                 continue
             content = last_message.content or ""
             if not content:

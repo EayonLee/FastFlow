@@ -9,7 +9,9 @@
     "axios": "^1.13.4",
     "crypto-js": "^4.2.0",
     "dagre": "^0.8.5",
+    "highlight.js": "^11.11.1",
     "lucide-vue-next": "^0.344.0",
+    "markdown-it": "^14.1.1",
     "validator": "^13.15.26",
     "vue": "^3.4.21"
   },

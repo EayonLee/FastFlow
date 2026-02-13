@@ -12,6 +12,7 @@ function injectScript() {
   const script = document.createElement('script')
   // Use absolute path from extension root
   script.src = chrome.runtime.getURL('src/inject/index.js')
+  script.type = 'module'
   script.onload = () => {
     Logger.info('通信脚本注入完成')
     script.remove()
@@ -42,16 +43,16 @@ function sendRenderRequest(graphData, onSuccess, onFail) {
   window.addEventListener('message', resultListener)
 }
 
-function getCurrentGraph() {
+function exportWorkflowGraph() {
   return new Promise((resolve, reject) => {
-    // 发送消息给 inject.js 请求当前图
+    // 发送消息给 inject.js，静默触发页面导出并回传导出原文。
     window.postMessage({
       type: EXPORT_MESSAGE_TYPE
     }, MESSAGE_TARGET)
 
     const timeout = setTimeout(() => {
       window.removeEventListener('message', resultListener)
-      reject(new Error('获取当前编排超时'))
+      reject(new Error('导出当前编排超时'))
     }, EXPORT_TIMEOUT_MS)
 
     const resultListener = (event) => {
@@ -61,7 +62,7 @@ function getCurrentGraph() {
       if (event.data.success) {
         resolve(event.data.payload)
       } else {
-        reject(new Error(event.data.message || '获取当前编排失败'))
+        reject(new Error(event.data.message || '导出当前编排失败'))
       }
     }
 
@@ -72,5 +73,5 @@ function getCurrentGraph() {
 export const Bridge = {
   injectScript,
   sendRenderRequest,
-  getCurrentGraph
+  exportWorkflowGraph
 }
