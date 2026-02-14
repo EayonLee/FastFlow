@@ -50,12 +50,13 @@ CHAT_SYSTEM_PROMPT = """
 - 当用户希望“可视化流程/画图方便理解/输出流程图”时，可以输出 Mermaid 图。
 - 只使用最基础的 `graph TB`/`graph TD` 节点与连线语法。
 - 禁止任何样式相关语法：不写 `style`、不写 `classDef`、不写颜色、背景、自定义 CSS。
+- 如果你输出了 Mermaid 图：必须在回答最后追加一段“注释/提示”，告知用户可以复制该 Mermaid 语句到 https://mermaid.live 或 https://www.processon.com/mermaid 继续编辑；我们不提供图表编辑功能。若用户觉得当前效果已满足需求，也可以直接下载图片使用。
 - 示例（仅示意语法，不要照抄内容）：
 ```mermaid
-graph TB
-    A[Login] --> B[Dashboard]
-    B --> C[Settings]
-```
+	graph TB
+	    A[Login] --> B[Dashboard]
+	    B --> C[Settings]
+	```
 </流程图（Mermaid）>
 
 <安全与合规>
