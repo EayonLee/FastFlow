@@ -68,13 +68,18 @@ function getOrCreateRenderSandbox() {
 
   const el = document.createElement('div')
   el.id = 'fastflow-mermaid-render-sandbox'
+  // 避免翻译类插件对离屏 DOM 做文本替换，影响 Mermaid 内部的测量与渲染逻辑。
+  el.className = 'notranslate'
+  el.setAttribute('translate', 'no')
   // 离屏但可测量：不要 display:none，否则 getBBox/getBoundingClientRect 可能为 0 或异常。
   Object.assign(el.style, {
     position: 'fixed',
     left: '-10000px',
     top: '-10000px',
-    width: '1px',
-    height: '1px',
+    // Mermaid 渲染过程会依赖容器尺寸做布局计算（不同图类型内部算法不同）。
+    // 这里给一个足够大的“画布”，避免出现 0 尺寸导致的 Infinity/-Infinity 等异常。
+    width: '4096px',
+    height: '4096px',
     overflow: 'hidden',
     visibility: 'hidden',
     pointerEvents: 'none'
@@ -108,18 +113,22 @@ async function renderMermaidSourceToSvg(source) {
     if (!renderMermaidInElement.__inited) {
       mermaid.initialize({
         startOnLoad: false,
-        securityLevel: 'strict'
+        securityLevel: 'strict',
+        // 关键：关闭 htmlLabels，避免 Mermaid 走 foreignObject + DOM 测量路径。
+        // 在浏览器插件（Shadow DOM + 各类页面/插件干扰）环境下，htmlLabels 很容易触发
+        // “div.node() 为空 -> getBoundingClientRect 报错”一类问题。
+        htmlLabels: false,
+        // 对 flowchart 单独再显式关一次，防止图类型配置覆盖全局开关。
+        flowchart: { htmlLabels: false }
       })
       renderMermaidInElement.__inited = true
     }
 
     const sandbox = getOrCreateRenderSandbox()
-    sandbox.innerHTML = ''
 
     // Mermaid 官方渲染 API：使用主文档离屏容器进行渲染，避免 Shadow DOM 下的测量/查询问题。
     const { svg } = await mermaid.render(createSvgId(), source, sandbox)
     _svgCache.set(key, svg)
-    sandbox.innerHTML = ''
     return svg
   })()
 
