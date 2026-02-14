@@ -1,8 +1,9 @@
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { Bot, MessageSquare, Send, Copy, Check, ZoomIn, ZoomOut, RotateCcw, X, FileCode, ImageDown } from 'lucide-vue-next'
+import { Bot, MessageSquare, Send, Copy, Check } from 'lucide-vue-next'
 import FlowSelect from '@/components/FlowSelect.vue'
 import Header from '@/components/Header.vue'
+import MermaidViewer from '@/chatbox/components/MermaidViewer.vue'
 import { useCopyFeedback } from '@/composables/useCopyFeedback.js'
 import { useResizable } from '@/composables/useResizable.js'
 import { useStreamTypewriter } from '@/composables/useStreamTypewriter.js'
@@ -108,324 +109,16 @@ const streamTypewriter = useStreamTypewriter({
 const mermaidViewerOpen = ref(false)
 const mermaidViewerSvg = ref('')
 const mermaidViewerSource = ref('')
-let svgPanZoomInstance = null
-let onViewerKeydown = null
-let mermaidViewerResizeObserver = null
-let onViewerWheel = null
-let viewerCopiedSourceTimer = null
-let viewerCopiedImageTimer = null
-const viewerCopiedSource = ref(false)
-const viewerCopiedImage = ref(false)
-
-async function ensureSvgPanZoom() {
-  // 按需加载，避免不使用时增加首包体积
-  const mod = await import('svg-pan-zoom')
-  // 关键：svg-pan-zoom 是 CJS 包，Vite 在不同构建路径下可能产生不同的导出形态：
-  // 1) { default: fn }
-  // 2) { s: { default: fn } }（当前构建产物就是这种）
-  // 这里不做“兜底”，而是显式选择“函数导出”，否则直接抛错，避免静默失败导致“看起来没生效”。
-  const candidates = [mod?.default, mod?.s?.default, mod?.s, mod]
-  const fn = candidates.find((c) => typeof c === 'function')
-  if (!fn) {
-    throw new Error('svg-pan-zoom 模块未导出可调用函数（构建导出形态不符合预期）')
-  }
-  return fn
-}
 
 function closeMermaidViewer() {
   mermaidViewerOpen.value = false
   mermaidViewerSvg.value = ''
   mermaidViewerSource.value = ''
-  viewerCopiedSource.value = false
-  viewerCopiedImage.value = false
-  if (viewerCopiedSourceTimer) {
-    clearTimeout(viewerCopiedSourceTimer)
-    viewerCopiedSourceTimer = null
-  }
-  if (viewerCopiedImageTimer) {
-    clearTimeout(viewerCopiedImageTimer)
-    viewerCopiedImageTimer = null
-  }
-  if (svgPanZoomInstance) {
-    try {
-      svgPanZoomInstance.destroy()
-    } catch (_) {
-      // ignore
-    }
-    svgPanZoomInstance = null
-  }
-
-  // 关闭预览时移除 wheel 默认行为拦截，避免影响聊天滚动
-  const canvasEl = containerRef.value?.querySelector?.('.mermaid-viewer-canvas')
-  if (canvasEl && onViewerWheel) {
-    canvasEl.removeEventListener('wheel', onViewerWheel, { capture: true })
-    onViewerWheel = null
-  }
-
-  // 关闭预览时停止观察聊天窗尺寸变化，避免泄露
-  if (mermaidViewerResizeObserver) {
-    try {
-      mermaidViewerResizeObserver.disconnect()
-    } catch (_) {
-      // ignore
-    }
-    mermaidViewerResizeObserver = null
-  }
-
-  // 关闭预览时移除快捷键监听，避免污染全局按键行为
-  if (onViewerKeydown) {
-    window.removeEventListener('keydown', onViewerKeydown, true)
-    onViewerKeydown = null
-  }
 }
 
-async function openMermaidViewer(svgHtml) {
+function openMermaidViewer(svgHtml) {
   mermaidViewerSvg.value = svgHtml || ''
   mermaidViewerOpen.value = true
-
-  await nextTick()
-  // 关键：我们本身就在 Shadow DOM 内，不能用 document.getElementById + shadowRoot 去找节点，
-  // 直接用组件自身的容器 ref 来定位即可。
-  const svgEl = containerRef.value?.querySelector('.mermaid-viewer-canvas svg')
-  if (!svgEl) return
-
-  // 关键：强制 SVG 填满画布，避免 Mermaid 内联 width/height/style 导致只显示一小块。
-  try {
-    svgEl.removeAttribute('style')
-    svgEl.setAttribute('width', '100%')
-    svgEl.setAttribute('height', '100%')
-    svgEl.style.width = '100%'
-    svgEl.style.height = '100%'
-    svgEl.style.maxWidth = 'none'
-    svgEl.style.maxHeight = 'none'
-    svgEl.style.display = 'block'
-  } catch (_) {
-    // ignore
-  }
-
-  const svgPanZoom = await ensureSvgPanZoom()
-
-  // 重新打开时确保销毁旧实例，避免事件/状态叠加
-  if (svgPanZoomInstance) {
-    try {
-      svgPanZoomInstance.destroy()
-    } catch (_) {
-      // ignore
-    }
-    svgPanZoomInstance = null
-  }
-
-  svgPanZoomInstance = svgPanZoom(svgEl, {
-    zoomEnabled: true,
-    // 由我们自定义右下角工具条，避免内嵌 SVG 控件在不同主题下不一致/不可控
-    controlIconsEnabled: false,
-    fit: true,
-    center: true,
-    panEnabled: true,
-    mouseWheelZoomEnabled: true,
-    dblClickZoomEnabled: true,
-    // 性能与交互：让库的事件监听尽量走 passive（更顺滑），
-    // 默认滚动由我们在画布容器上统一拦截，避免滚轮滚动穿透到消息列表。
-    preventMouseEventsDefault: false,
-    zoomScaleSensitivity: 0.22,
-    minZoom: 0.2,
-    maxZoom: 20
-  })
-
-  // 初次打开时显式做一次布局校准，避免容器尺寸变化导致初始视图不居中/不适配
-  try {
-    svgPanZoomInstance.resize()
-    svgPanZoomInstance.fit()
-    svgPanZoomInstance.center()
-  } catch (_) {
-    // ignore
-  }
-
-  // 统一拦截滚轮默认滚动（只阻止滚动，不阻止事件冒泡，svg-pan-zoom 仍能收到 wheel 做缩放）
-  const canvasEl = containerRef.value?.querySelector?.('.mermaid-viewer-canvas')
-  if (canvasEl && !onViewerWheel) {
-    onViewerWheel = (evt) => {
-      evt.preventDefault()
-    }
-    canvasEl.addEventListener('wheel', onViewerWheel, { passive: false, capture: true })
-  }
-
-  // 跟随聊天窗大小变化：聊天窗可拖拽缩放，预览层需要同步调整并通知 svg-pan-zoom。
-  if (containerRef.value && !mermaidViewerResizeObserver) {
-    mermaidViewerResizeObserver = new ResizeObserver(() => {
-      if (!svgPanZoomInstance) return
-      try {
-        svgPanZoomInstance.resize()
-        svgPanZoomInstance.fit()
-        svgPanZoomInstance.center()
-      } catch (_) {
-        // ignore
-      }
-    })
-    mermaidViewerResizeObserver.observe(containerRef.value)
-  }
-
-  // Esc 关闭预览
-  if (!onViewerKeydown) {
-    onViewerKeydown = (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        closeMermaidViewer()
-      }
-    }
-    window.addEventListener('keydown', onViewerKeydown, true)
-  }
-}
-
-function mermaidViewerZoomIn() {
-  try {
-    svgPanZoomInstance?.zoomIn?.()
-  } catch (_) {
-    // ignore
-  }
-}
-
-function mermaidViewerZoomOut() {
-  try {
-    svgPanZoomInstance?.zoomOut?.()
-  } catch (_) {
-    // ignore
-  }
-}
-
-function mermaidViewerReset() {
-  if (!svgPanZoomInstance) return
-  try {
-    svgPanZoomInstance.reset()
-    svgPanZoomInstance.resize()
-    svgPanZoomInstance.fit()
-    svgPanZoomInstance.center()
-  } catch (_) {
-    // ignore
-  }
-}
-
-async function mermaidViewerCopySource() {
-  if (!mermaidViewerSource.value) return
-  try {
-    // 优先使用 Clipboard API；但在部分 http 页面/受限环境下 navigator.clipboard 可能不存在
-    if (navigator?.clipboard?.writeText) {
-      await navigator.clipboard.writeText(mermaidViewerSource.value)
-    } else {
-      throw new Error('navigator.clipboard.writeText 不可用')
-    }
-  } catch (_) {
-    // 兜底：execCommand（对文本复制的兼容性最好）
-    const textarea = document.createElement('textarea')
-    textarea.value = mermaidViewerSource.value
-    textarea.style.position = 'fixed'
-    textarea.style.left = '-9999px'
-    document.body.appendChild(textarea)
-    textarea.focus()
-    textarea.select()
-    document.execCommand('copy')
-    textarea.remove()
-  }
-
-  viewerCopiedSource.value = true
-  if (viewerCopiedSourceTimer) clearTimeout(viewerCopiedSourceTimer)
-  viewerCopiedSourceTimer = setTimeout(() => {
-    viewerCopiedSource.value = false
-    viewerCopiedSourceTimer = null
-  }, 1200)
-}
-
-function getSvgStringForExport() {
-  const svgEl = containerRef.value?.querySelector('.mermaid-viewer-canvas svg')
-  if (!svgEl) return null
-
-  // 深拷贝一份，避免污染页面中的 SVG（例如 svg-pan-zoom 注入的属性）
-  const clone = svgEl.cloneNode(true)
-  if (!(clone instanceof SVGElement)) return null
-
-  clone.removeAttribute('style')
-  // 尽量保留原始 viewBox（Mermaid 一般自带），但删除宽高限制交给导出逻辑决定
-  clone.removeAttribute('width')
-  clone.removeAttribute('height')
-  clone.style.width = ''
-  clone.style.height = ''
-  clone.style.maxWidth = ''
-  clone.style.maxHeight = ''
-
-  // 为了导出稳定性：补充必要的命名空间
-  if (!clone.getAttribute('xmlns')) {
-    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
-  }
-
-  return new XMLSerializer().serializeToString(clone)
-}
-
-async function mermaidViewerCopyImage() {
-  const svgText = getSvgStringForExport()
-  if (!svgText) return
-
-  const svgBlob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' })
-  const url = URL.createObjectURL(svgBlob)
-
-  try {
-    const img = new Image()
-    const loaded = new Promise((resolve, reject) => {
-      img.onload = resolve
-      img.onerror = reject
-    })
-    img.src = url
-    await loaded
-
-    // 导出 PNG 尺寸：取预览画布尺寸（用户看到的区域），保证“复制的图片”符合当前 UI 尺寸。
-    const canvasEl = containerRef.value?.querySelector?.('.mermaid-viewer-canvas')
-    const rect = canvasEl?.getBoundingClientRect?.()
-    const w = Math.max(1, Math.floor(rect?.width || img.naturalWidth || img.width || 800))
-    const h = Math.max(1, Math.floor(rect?.height || img.naturalHeight || img.height || 600))
-
-    const canvas = document.createElement('canvas')
-    canvas.width = w
-    canvas.height = h
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    // 使用当前主题背景色，避免透明 PNG 在不同底色下可读性差
-    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg-app')?.trim() || '#ffffff'
-    ctx.fillStyle = bg
-    ctx.fillRect(0, 0, w, h)
-    ctx.drawImage(img, 0, 0, w, h)
-
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
-    if (!blob) return
-
-    // 复制图片到剪贴板：需要 ClipboardItem + navigator.clipboard.write
-    // 在部分页面（尤其是 http）中，这两个 API 可能不可用；此时降级为“下载 PNG”。
-    if (navigator?.clipboard?.write && typeof ClipboardItem !== 'undefined') {
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          'image/png': blob
-        })
-      ])
-    } else {
-      const dlUrl = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = dlUrl
-      a.download = 'mermaid.png'
-      a.style.display = 'none'
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      setTimeout(() => URL.revokeObjectURL(dlUrl), 1000)
-    }
-
-    viewerCopiedImage.value = true
-    if (viewerCopiedImageTimer) clearTimeout(viewerCopiedImageTimer)
-    viewerCopiedImageTimer = setTimeout(() => {
-      viewerCopiedImage.value = false
-      viewerCopiedImageTimer = null
-    }, 1200)
-  } finally {
-    URL.revokeObjectURL(url)
-  }
 }
 
 // 创建消息对象（统一时间格式）
@@ -795,47 +488,14 @@ function handleKeydown(e) {
               </div>
             </div>
           </div>
-        </div>
+    </div>
 
-        <!-- Mermaid 放大查看（支持拖拽与缩放） -->
-        <div v-if="mermaidViewerOpen" class="mermaid-viewer-overlay" @click.self="closeMermaidViewer">
-          <div class="mermaid-viewer">
-            <button class="mermaid-viewer-close" type="button" title="关闭 (Esc)" @click="closeMermaidViewer">
-              <X :size="16" />
-            </button>
-            <div class="mermaid-viewer-canvas" v-html="mermaidViewerSvg"></div>
-            <div class="mermaid-viewer-toolbar" role="toolbar" aria-label="Mermaid 缩放工具">
-              <button class="mermaid-toolbtn" type="button" data-tip="放大" @click="mermaidViewerZoomIn">
-                <ZoomIn :size="16" />
-              </button>
-              <button class="mermaid-toolbtn" type="button" data-tip="缩小" @click="mermaidViewerZoomOut">
-                <ZoomOut :size="16" />
-              </button>
-              <button class="mermaid-toolbtn" type="button" data-tip="重置" @click="mermaidViewerReset">
-                <RotateCcw :size="16" />
-              </button>
-              <div class="mermaid-tool-sep" aria-hidden="true"></div>
-              <button
-                class="mermaid-toolbtn"
-                type="button"
-                :data-tip="viewerCopiedSource ? '已复制 Mermaid 语句' : '复制 Mermaid 语句'"
-                @click="mermaidViewerCopySource"
-              >
-                <Check v-if="viewerCopiedSource" :size="16" />
-                <FileCode v-else :size="16" />
-              </button>
-              <button
-                class="mermaid-toolbtn"
-                type="button"
-                :data-tip="viewerCopiedImage ? '已复制图片' : '复制图片'"
-                @click="mermaidViewerCopyImage"
-              >
-                <Check v-if="viewerCopiedImage" :size="16" />
-                <ImageDown v-else :size="16" />
-              </button>
-            </div>
-          </div>
-        </div>
+        <MermaidViewer
+          :open="mermaidViewerOpen"
+          :svg-html="mermaidViewerSvg"
+          :source="mermaidViewerSource"
+          @close="closeMermaidViewer"
+        />
         
         <!-- 输入区域 -->
         <div class="input-area">

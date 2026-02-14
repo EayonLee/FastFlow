@@ -166,7 +166,7 @@ function goToRegister() {
 
       <div class="global-error" v-if="globalError">{{ globalError }}</div>
 
-      <NeonButton full-width :disabled="isLoading" @click="handleLogin">
+      <NeonButton type="submit" full-width :disabled="isLoading">
         {{ isLoading ? '登录中...' : '登录' }}
       </NeonButton>
     </form>

@@ -489,7 +489,7 @@
 }
 
 #fastflow-copilot-container .mermaid-viewer-close:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--accent-neon) 60%, transparent);
+    outline: 2px solid var(--accent-neon);
     outline-offset: 2px;
 }
 
@@ -566,7 +566,17 @@
 }
 
 #fastflow-copilot-container .mermaid-viewer-toolbar .mermaid-toolbtn:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--accent-neon) 60%, transparent);
+    outline: 2px solid var(--accent-neon);
+    outline-offset: 2px;
+}
+
+#fastflow-copilot-container .send-btn:focus-visible {
+    outline: 2px solid var(--accent-neon);
+    outline-offset: 2px;
+}
+
+#fastflow-copilot-container .copy-btn:focus-visible {
+    outline: 2px solid var(--accent-neon);
     outline-offset: 2px;
 }
 

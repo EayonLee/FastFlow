@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { copyTextToClipboard } from '@/utils/clipboard.js'
 
 // 默认“已复制”提示的展示时长（毫秒）
 const DEFAULT_TIMEOUT_MS = 1500
@@ -25,22 +26,9 @@ export function useCopyFeedback(options = {}) {
   // 执行复制（优先 clipboard API，失败走兜底）
   async function copyText(content, messageId) {
     if (!content) return
-    try {
-      await navigator.clipboard.writeText(content)
-      markCopied(messageId)
-    } catch (e) {
-      // 兜底：部分环境不支持 clipboard API
-      const textarea = document.createElement('textarea')
-      textarea.value = content
-      textarea.style.position = 'fixed'
-      textarea.style.left = '-9999px'
-      document.body.appendChild(textarea)
-      textarea.focus()
-      textarea.select()
-      document.execCommand('copy')
-      textarea.remove()
-      markCopied(messageId)
-    }
+    const ok = await copyTextToClipboard(content)
+    if (!ok) return
+    markCopied(messageId)
   }
 
   return {

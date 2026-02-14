@@ -191,14 +191,14 @@ function goToLogin() {
           >
           <div class="error-msg" v-if="errors.code">{{ errors.code }}</div>
         </div>
-        <button 
-          type="button" 
-          class="btn-code" 
+        <NeonButton
+          type="button"
+          class="btn-code"
           :disabled="codeTimer > 0"
           @click="sendCode"
         >
           {{ codeTimer > 0 ? `${codeTimer}s` : '获取验证码' }}
-        </button>
+        </NeonButton>
       </div>
       
       <div class="form-group">
@@ -223,7 +223,7 @@ function goToLogin() {
         <div class="error-msg" v-if="errors.confirmPassword">{{ errors.confirmPassword }}</div>
       </div>
 
-      <NeonButton full-width :disabled="isLoading" @click="handleRegister" style="margin-top: 8px;">
+      <NeonButton type="submit" full-width :disabled="isLoading" style="margin-top: 8px;">
         {{ isLoading ? '注册中...' : '注册' }}
       </NeonButton>
     </form>
@@ -291,15 +291,11 @@ function goToLogin() {
 }
 
 .btn-code {
-  height: 38px; /* Match input height roughly */
-  margin-bottom: 2px; /* Align visual bottom */
-  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-primary);
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 0 12px;
+  /* 复用 NeonButton 的整体风格，但尺寸更紧凑，保证和输入框对齐 */
+  height: 38px;
+  margin-bottom: 2px;
+  padding: 0 12px !important;
+  font-size: 12px !important;
   white-space: nowrap;
 }
 

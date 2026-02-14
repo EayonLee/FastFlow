@@ -55,18 +55,19 @@
   --bg-surface: #ffffff; /* 聊天气泡和输入框背景设为纯白 */
   
   --border-subtle: rgba(0, 0, 0, 0.08);
-  --border-active: rgba(0, 200, 80, 0.5); 
-  --border-glow: rgba(0, 200, 80, 0.2);
+  /* 亮色主题下也统一使用“霓绿”作为交互高亮 */
+  --border-active: rgba(0, 255, 65, 0.55); 
+  --border-glow: rgba(0, 255, 65, 0.25);
   
   --text-primary: #1f2937; /* 深灰而非纯黑 */
   --text-secondary: #6b7280;
   --text-dim: #9ca3af;
   
-  /* 调整霓虹色在亮色背景下的表现 */
-  --accent-neon: #10b981; /* 使用 Emerald 绿，更适合浅色主题 */
-  --accent-neon-dim: rgba(16, 185, 129, 0.1);
-  --accent-neon-hover: rgba(16, 185, 129, 0.15);
-  --accent-neon-glow: 0 0 15px rgba(16, 185, 129, 0.25);
+  /* 关键：全局交互描边/选中态必须是霓绿（与暗色一致） */
+  --accent-neon: #00ff41;
+  --accent-neon-dim: rgba(0, 255, 65, 0.12);
+  --accent-neon-hover: rgba(0, 255, 65, 0.18);
+  --accent-neon-glow: 0 0 15px rgba(0, 255, 65, 0.28);
   
   --danger: #ef4444;
   --code-block-bg: #f3f6f9;

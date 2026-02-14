@@ -3,11 +3,15 @@
  * Neon Button Component
  * 封装了霓虹风格按钮的样式和交互逻辑
  */
-defineProps({
-  disabled: {
-    type: Boolean,
-    default: false
-  },
+	defineProps({
+	  type: {
+	    type: String,
+	    default: 'button'
+	  },
+	  disabled: {
+	    type: Boolean,
+	    default: false
+	  },
   large: {
     type: Boolean,
     default: false
@@ -21,16 +25,17 @@ defineProps({
 defineEmits(['click'])
 </script>
 
-<template>
-  <button 
-    class="neon-btn" 
-    :class="{ 'large': large, 'full-width': fullWidth }"
-    :disabled="disabled"
-    @click="$emit('click')"
-  >
-    <slot></slot>
-  </button>
-</template>
+	<template>
+	  <button 
+	    class="neon-btn" 
+	    :class="{ 'large': large, 'full-width': fullWidth }"
+	    :type="type"
+	    :disabled="disabled"
+	    @click="$emit('click')"
+	  >
+	    <slot></slot>
+	  </button>
+	</template>
 
 <style scoped>
 .neon-btn {
@@ -65,12 +70,18 @@ defineEmits(['click'])
 }
 
 /* Hover 状态 - 确保高优先级 */
-.neon-btn:hover:not(:disabled) {
-  background-color: var(--accent-neon) !important;
-  color: #050505 !important;
-  box-shadow: 0 0 20px color-mix(in srgb, var(--accent-neon) 55%, transparent);
-  transform: translateY(-1px);
-}
+	.neon-btn:hover:not(:disabled) {
+	  background-color: var(--accent-neon) !important;
+	  color: #050505 !important;
+	  box-shadow: 0 0 20px color-mix(in srgb, var(--accent-neon) 55%, transparent);
+	  transform: translateY(-1px);
+	}
+
+	/* 统一 focus 样式：全局要求使用“霓绿”描边 */
+	.neon-btn:focus-visible {
+	  outline: 2px solid var(--accent-neon);
+	  outline-offset: 2px;
+	}
 
 /* Fallback for when CSS variables are missing */
 @supports not (border-color: var(--accent-neon)) {
