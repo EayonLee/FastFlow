@@ -156,5 +156,8 @@ function normalizeLooseTables(markdown) {
  * @returns {string}
  */
 export function renderMarkdown(markdown) {
-  return md.render(normalizeLooseTables(markdown))
+  const html = md.render(normalizeLooseTables(markdown))
+  // 安全处理：markdown-it 关闭了 html（html:false），因此诸如 <br/> 会被转义成 &lt;br/&gt;。
+  // 但我们希望允许“仅 br 标签”用于排版（例如提示块中使用 <br/>），所以仅反转义 br。
+  return html.replace(/&lt;br\s*\/?\s*&gt;/gi, '<br/>')
 }
