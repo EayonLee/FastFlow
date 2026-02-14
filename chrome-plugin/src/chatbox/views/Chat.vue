@@ -13,6 +13,7 @@ import { getModelConfigs } from '@/services/modelConfig.js'
 import { Layout } from '@/utils/layout.js'
 import { formatDateTime } from '@/utils/time.js'
 import { renderMarkdown } from '@/utils/markdown.js'
+import { renderMermaidInElement } from '@/utils/mermaid.js'
 import { generateUuid32 } from '@/utils/uuid.js'
 
 // 存储 key（用于记住聊天框尺寸）
@@ -234,6 +235,20 @@ function scrollToBottom() {
       messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
     }
   })
+
+  scheduleMermaidRender()
+}
+
+let mermaidRenderTimer = null
+function scheduleMermaidRender() {
+  if (mermaidRenderTimer) return
+  mermaidRenderTimer = setTimeout(() => {
+    mermaidRenderTimer = null
+    nextTick(() => {
+      if (!messagesContainer.value) return
+      renderMermaidInElement(messagesContainer.value)
+    })
+  }, 250)
 }
 
 // 添加消息辅助函数

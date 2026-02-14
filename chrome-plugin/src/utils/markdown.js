@@ -1,6 +1,15 @@
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js/lib/common'
 
+function escapeHtml(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 const md = new MarkdownIt({
   html: false,
   linkify: true,
@@ -17,6 +26,31 @@ const md = new MarkdownIt({
     return `<pre class="msg-code-block"><code class="hljs">${highlighted}</code></pre>`
   }
 })
+
+// Mermaid 目前需要前端渲染：这里先把 ```mermaid``` 代码块标记成可识别的容器，
+// 后续由 DOM 后处理（utils/mermaid.js）渲染为 SVG。
+const defaultFenceRenderer =
+  md.renderer.rules.fence ||
+  function fence(tokens, idx, options, env, self) {
+    return self.renderToken(tokens, idx, options)
+  }
+md.renderer.rules.fence = function fence(tokens, idx, options, env, self) {
+  const token = tokens[idx]
+  const info = String(token.info || '').trim()
+  const lang = info.split(/\s+/g)[0].toLowerCase()
+
+  if (lang === 'mermaid') {
+    const source = String(token.content || '')
+    const escapedSource = escapeHtml(source)
+    return [
+      '<div class="msg-mermaid" data-rendered="0">',
+      `<pre class="msg-code-block"><code class="language-mermaid">${escapedSource}</code></pre>`,
+      '</div>'
+    ].join('')
+  }
+
+  return defaultFenceRenderer(tokens, idx, options, env, self)
+}
 
 // 给表格添加容器与样式类，便于横向滚动与统一 UI。
 md.renderer.rules.table_open = () => '<div class="msg-table-wrap"><table class="msg-table">'
