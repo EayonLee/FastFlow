@@ -52,7 +52,7 @@ const goToLogin = () => {
 }
 
 .title-main {
-  color: #fff;
+  color: var(--text-primary);
   display: block;
   font-weight: 700;
   text-transform: uppercase;
@@ -66,7 +66,7 @@ const goToLogin = () => {
   font-weight: 300;
   text-transform: uppercase;
   letter-spacing: 4px;
-  text-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent-neon) 35%, transparent);
 }
 
 .hero-desc {
@@ -79,7 +79,7 @@ const goToLogin = () => {
 
 .sub-desc {
   font-size: 14px;
-  color: #fff;
+  color: var(--text-primary);
   font-weight: 500;
 }
 </style>

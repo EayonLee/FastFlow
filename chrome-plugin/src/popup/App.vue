@@ -193,7 +193,7 @@ body {
 .status-info h3 {
   margin: 0 0 4px 0;
   font-size: 16px;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .status-info p {

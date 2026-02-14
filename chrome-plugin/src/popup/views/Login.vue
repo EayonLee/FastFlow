@@ -199,10 +199,10 @@ function goToRegister() {
 .form-group input {
   width: 100%;
   padding: 10px;
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s;
@@ -248,7 +248,7 @@ function goToRegister() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
 }
 
 .checkbox-label input:checked + .checkmark {

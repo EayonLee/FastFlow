@@ -22,9 +22,9 @@
   background: var(--bg-app);
 }
 ::-webkit-scrollbar-thumb {
-  background: #333;
+  background: color-mix(in srgb, var(--text-primary) 22%, transparent);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: color-mix(in srgb, var(--text-primary) 35%, transparent);
 }

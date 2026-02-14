@@ -37,13 +37,14 @@ defineEmits(['click'])
   /* 基础样式 */
   background-color: transparent !important;
   border: 1px solid var(--accent-neon) !important;
-  color: #fff !important;
+  /* 亮色主题下也需要可读：默认使用主文本色 */
+  color: var(--text-primary) !important;
   border-radius: 8px;
   cursor: pointer;
   font-family: var(--font-ui);
   font-weight: 600;
   transition: all 0.2s ease;
-  box-shadow: 0 0 10px rgba(0, 255, 65, 0.1);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent-neon) 18%, transparent);
   position: relative;
   overflow: hidden;
   
@@ -66,8 +67,8 @@ defineEmits(['click'])
 /* Hover 状态 - 确保高优先级 */
 .neon-btn:hover:not(:disabled) {
   background-color: var(--accent-neon) !important;
-  color: #000 !important;
-  box-shadow: 0 0 20px rgba(0, 255, 65, 0.4);
+  color: #050505 !important;
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent-neon) 55%, transparent);
   transform: translateY(-1px);
 }
 
@@ -90,8 +91,8 @@ defineEmits(['click'])
 .neon-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-  border-color: rgba(255, 255, 255, 0.2) !important;
-  color: rgba(255, 255, 255, 0.4) !important;
+  border-color: var(--border-subtle) !important;
+  color: var(--text-dim) !important;
   box-shadow: none;
 }
 </style>

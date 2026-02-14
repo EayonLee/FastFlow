@@ -256,10 +256,10 @@ function goToLogin() {
 .form-group input {
   width: 100%;
   padding: 10px;
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s;
@@ -293,9 +293,9 @@ function goToLogin() {
 .btn-code {
   height: 38px; /* Match input height roughly */
   margin-bottom: 2px; /* Align visual bottom */
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
   border: 1px solid var(--border-subtle);
-  color: #fff;
+  color: var(--text-primary);
   border-radius: 6px;
   cursor: pointer;
   font-size: 12px;

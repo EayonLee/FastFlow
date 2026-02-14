@@ -307,7 +307,26 @@ function mermaidViewerReset() {
 
 async function mermaidViewerCopySource() {
   if (!mermaidViewerSource.value) return
-  await navigator.clipboard.writeText(mermaidViewerSource.value)
+  try {
+    // 优先使用 Clipboard API；但在部分 http 页面/受限环境下 navigator.clipboard 可能不存在
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(mermaidViewerSource.value)
+    } else {
+      throw new Error('navigator.clipboard.writeText 不可用')
+    }
+  } catch (_) {
+    // 兜底：execCommand（对文本复制的兼容性最好）
+    const textarea = document.createElement('textarea')
+    textarea.value = mermaidViewerSource.value
+    textarea.style.position = 'fixed'
+    textarea.style.left = '-9999px'
+    document.body.appendChild(textarea)
+    textarea.focus()
+    textarea.select()
+    document.execCommand('copy')
+    textarea.remove()
+  }
+
   viewerCopiedSource.value = true
   if (viewerCopiedSourceTimer) clearTimeout(viewerCopiedSourceTimer)
   viewerCopiedSourceTimer = setTimeout(() => {
@@ -378,11 +397,25 @@ async function mermaidViewerCopyImage() {
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
     if (!blob) return
 
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        'image/png': blob
-      })
-    ])
+    // 复制图片到剪贴板：需要 ClipboardItem + navigator.clipboard.write
+    // 在部分页面（尤其是 http）中，这两个 API 可能不可用；此时降级为“下载 PNG”。
+    if (navigator?.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'image/png': blob
+        })
+      ])
+    } else {
+      const dlUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = dlUrl
+      a.download = 'mermaid.png'
+      a.style.display = 'none'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(dlUrl), 1000)
+    }
 
     viewerCopiedImage.value = true
     if (viewerCopiedImageTimer) clearTimeout(viewerCopiedImageTimer)
