@@ -241,14 +241,16 @@ function scrollToBottom() {
 
 let mermaidRenderTimer = null
 function scheduleMermaidRender() {
-  if (mermaidRenderTimer) return
+  // 这里必须做 debounce（每次有新内容都重置），否则流式更新会不断重绘 v-html，
+  // 造成“渲染了又被覆盖”，用户体验上会表现为“只有全部输出完才出现图”。
+  if (mermaidRenderTimer) clearTimeout(mermaidRenderTimer)
   mermaidRenderTimer = setTimeout(() => {
     mermaidRenderTimer = null
     nextTick(() => {
       if (!messagesContainer.value) return
       renderMermaidInElement(messagesContainer.value)
     })
-  }, 250)
+  }, 300)
 }
 
 // 添加消息辅助函数

@@ -1,5 +1,6 @@
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js/lib/common'
+import { getCachedMermaidSvg, hashMermaidSource, isSupportedMermaidSource } from '@/utils/mermaid.js'
 
 function escapeHtml(text) {
   return String(text || '')
@@ -41,10 +42,22 @@ md.renderer.rules.fence = function fence(tokens, idx, options, env, self) {
 
   if (lang === 'mermaid') {
     const source = String(token.content || '')
+    const normalizedSource = source.trim()
+    const key = hashMermaidSource(normalizedSource)
+
+    // 已渲染过的图：直接输出缓存的 SVG，避免流式更新时 DOM 重绘导致回退为代码块。
+    const cachedSvg = getCachedMermaidSvg(normalizedSource)
+    if (cachedSvg) {
+      return `<div class="msg-mermaid" data-rendered="1" data-key="${escapeHtml(key)}">${cachedSvg}</div>`
+    }
+
     const escapedSource = escapeHtml(source)
+    const supported = isSupportedMermaidSource(normalizedSource)
+    const hint = supported ? '' : '<div class="msg-mermaid-error">仅支持渲染 graph/flowchart 流程图。</div>'
     return [
-      '<div class="msg-mermaid" data-rendered="0">',
+      `<div class="msg-mermaid" data-rendered="0" data-key="${escapeHtml(key)}">`,
       `<pre class="msg-code-block"><code class="language-mermaid">${escapedSource}</code></pre>`,
+      hint,
       '</div>'
     ].join('')
   }
