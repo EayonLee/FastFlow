@@ -324,14 +324,22 @@
 }
 
 #fastflow-copilot-container .msg-markdown a {
-    color: var(--accent-neon);
+    /* 默认：暗绿色，避免大段链接“太亮”抢视线 */
+    color: color-mix(in srgb, var(--accent-neon) 55%, var(--text-secondary));
     text-decoration: underline;
     text-underline-offset: 2px;
     word-break: break-word;
 }
 
-#fastflow-copilot-container .msg-markdown a:hover {
+#fastflow-copilot-container .msg-markdown a:visited {
+    color: color-mix(in srgb, var(--accent-neon) 55%, var(--text-secondary));
+}
+
+#fastflow-copilot-container .msg-markdown a:hover,
+#fastflow-copilot-container .msg-markdown a:focus-visible {
+    color: var(--accent-neon);
     text-decoration-thickness: 2px;
+    text-shadow: 0 0 10px var(--accent-neon-dim);
 }
 
 #fastflow-copilot-container .msg-markdown .msg-table-wrap {
