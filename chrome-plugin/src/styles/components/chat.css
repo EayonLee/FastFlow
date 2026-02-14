@@ -310,8 +310,8 @@
 #fastflow-copilot-container .msg-markdown blockquote {
     margin: 12px 0 0;
     padding: 8px 10px;
-    border-left: 3px solid var(--border-subtle);
-    background: rgba(255, 255, 255, 0.03);
+    border-left: 3px solid var(--md-quote-border);
+    background: var(--md-quote-bg);
     border-radius: 6px;
 }
 
@@ -380,7 +380,11 @@
     font-size: 12px;
     padding: 1px 4px;
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--md-inline-code-bg);
+    border: 1px solid var(--md-inline-code-border);
+    color: var(--md-inline-code-text);
+    display: inline-block;
+    line-height: 1.4;
 }
 
 #fastflow-copilot-container .msg-markdown pre.msg-code-block {
@@ -408,6 +412,7 @@
     margin: 0;
     border-radius: 0;
     background: transparent;
+    border: 0;
     color: inherit;
     font-family: var(--font-mono);
     font-size: 12px;

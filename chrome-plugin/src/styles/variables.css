@@ -27,6 +27,13 @@
   --code-token-number: #b5cea8;
   --code-token-boolean: #569cd6;
   --code-token-null: #dcdcaa;
+
+  /* Markdown 细节（保证深浅色主题都“看得出来”） */
+  --md-inline-code-bg: rgba(255, 255, 255, 0.08);
+  --md-inline-code-border: rgba(255, 255, 255, 0.12);
+  --md-inline-code-text: var(--text-primary);
+  --md-quote-bg: rgba(255, 255, 255, 0.03);
+  --md-quote-border: color-mix(in srgb, var(--accent-neon) 35%, var(--border-subtle));
   
   /* 布局尺寸 */
   --sidebar-width: 280px;
@@ -78,4 +85,11 @@
   --code-token-number: #7c3aed;
   --code-token-boolean: #b45309;
   --code-token-null: #6b7280;
+
+  /* Markdown 细节（亮色主题下默认 rgba(255,...) 太淡） */
+  --md-inline-code-bg: rgba(15, 23, 42, 0.06);
+  --md-inline-code-border: rgba(15, 23, 42, 0.14);
+  --md-inline-code-text: var(--text-primary);
+  --md-quote-bg: rgba(15, 23, 42, 0.04);
+  --md-quote-border: color-mix(in srgb, var(--accent-neon) 35%, var(--border-subtle));
 }
