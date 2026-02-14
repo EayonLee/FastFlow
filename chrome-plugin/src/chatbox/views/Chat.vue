@@ -16,6 +16,7 @@ import { formatDateTime } from '@/utils/time.js'
 import { renderMarkdown } from '@/utils/markdown.js'
 import { getMermaidSourceByKey, renderMermaidInElement } from '@/utils/mermaid.js'
 import { generateUuid32 } from '@/utils/uuid.js'
+import { useMermaidThemeSync } from '@/chatbox/composables/useMermaidThemeSync.js'
 
 // 存储 key（用于记住聊天框尺寸）
 const CHAT_SIZE_STORAGE_KEY = 'chat_box_size'
@@ -79,6 +80,9 @@ const messagesContainer = ref(null)
 const inputRef = ref(null)
 // 聊天容器 DOM 引用，用于拖拽调整尺寸
 const containerRef = ref(null)
+
+// 主题切换时让已渲染 Mermaid 图同步换色（避免“背景切了但图还是旧主题”）
+useMermaidThemeSync(messagesContainer)
 // 会话 ID（用于后端上下文与连续对话）
 const sessionId = ref(generateUuid32())
 // 是否正在拖拽尺寸（用于样式表现）
