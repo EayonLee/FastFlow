@@ -35,6 +35,9 @@
   transform: translateY(20px) scale(0.98);
   pointer-events: none;
   transition: var(--transition-smooth), background-color 0.3s;
+  /* 关键：内部弹层（例如 Mermaid 预览遮罩）需要被圆角裁剪，
+     否则亮色主题下会在圆角外露出明显的黑色三角。 */
+  overflow: hidden;
 }
 
 #fastflow-copilot-container .resize-handle {
@@ -433,6 +436,7 @@
     background: rgba(0, 0, 0, 0.65);
     display: block;
     padding: 0;
+    border-radius: inherit;
 }
 
 #fastflow-copilot-container .mermaid-viewer {
@@ -464,11 +468,73 @@
     inset: 0;
     padding: 44px 12px 12px 12px;
     overflow: hidden;
+    /* 防止触摸/滚轮滚动穿透到底层消息列表 */
+    touch-action: none;
+    user-select: none;
+    contain: content;
 }
 
 #fastflow-copilot-container .mermaid-viewer-canvas svg {
     width: 100%;
     height: 100%;
+    cursor: grab;
+}
+
+#fastflow-copilot-container .mermaid-viewer-canvas svg:active {
+    cursor: grabbing;
+}
+
+/* 优化缩放拖拽时的重绘 */
+#fastflow-copilot-container .mermaid-viewer-canvas .svg-pan-zoom_viewport {
+    will-change: transform;
+}
+
+/* 右下角工具条：玻璃质感 + 霓虹强调，兼容深浅色主题变量 */
+#fastflow-copilot-container .mermaid-viewer-toolbar {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    z-index: 3;
+    display: inline-flex;
+    gap: 6px;
+    padding: 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border-subtle);
+    background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
+    box-shadow:
+      0 10px 24px rgba(0,0,0,0.28),
+      0 0 0 1px color-mix(in srgb, var(--accent-neon) 18%, transparent);
+    -webkit-backdrop-filter: blur(10px) saturate(140%);
+    backdrop-filter: blur(10px) saturate(140%);
+}
+
+#fastflow-copilot-container .mermaid-viewer-toolbar .mermaid-toolbtn {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: transform 0.12s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+#fastflow-copilot-container .mermaid-viewer-toolbar .mermaid-toolbtn:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--accent-neon) 40%, transparent);
+    background: color-mix(in srgb, var(--accent-neon-dim) 55%, var(--bg-surface));
+}
+
+#fastflow-copilot-container .mermaid-viewer-toolbar .mermaid-toolbtn:active {
+    transform: translateY(0);
+}
+
+#fastflow-copilot-container .mermaid-viewer-toolbar .mermaid-toolbtn:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent-neon) 60%, transparent);
+    outline-offset: 2px;
 }
 
 .message-wrapper.ai .msg-body {

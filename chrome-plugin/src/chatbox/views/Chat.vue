@@ -1,6 +1,6 @@
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { Bot, MessageSquare, Send, Copy, Check } from 'lucide-vue-next'
+import { Bot, MessageSquare, Send, Copy, Check, ZoomIn, ZoomOut, RotateCcw } from 'lucide-vue-next'
 import FlowSelect from '@/components/FlowSelect.vue'
 import Header from '@/components/Header.vue'
 import { useCopyFeedback } from '@/composables/useCopyFeedback.js'
@@ -110,6 +110,7 @@ const mermaidViewerSvg = ref('')
 let svgPanZoomInstance = null
 let onViewerKeydown = null
 let mermaidViewerResizeObserver = null
+let onViewerWheel = null
 
 async function ensureSvgPanZoom() {
   // 按需加载，避免不使用时增加首包体积
@@ -136,6 +137,13 @@ function closeMermaidViewer() {
       // ignore
     }
     svgPanZoomInstance = null
+  }
+
+  // 关闭预览时移除 wheel 默认行为拦截，避免影响聊天滚动
+  const canvasEl = containerRef.value?.querySelector?.('.mermaid-viewer-canvas')
+  if (canvasEl && onViewerWheel) {
+    canvasEl.removeEventListener('wheel', onViewerWheel, { capture: true })
+    onViewerWheel = null
   }
 
   // 关闭预览时停止观察聊天窗尺寸变化，避免泄露
@@ -179,13 +187,17 @@ async function openMermaidViewer(svgHtml) {
 
   svgPanZoomInstance = svgPanZoom(svgEl, {
     zoomEnabled: true,
-    controlIconsEnabled: true,
+    // 由我们自定义右下角工具条，避免内嵌 SVG 控件在不同主题下不一致/不可控
+    controlIconsEnabled: false,
     fit: true,
     center: true,
     panEnabled: true,
     mouseWheelZoomEnabled: true,
     dblClickZoomEnabled: true,
-    preventMouseEventsDefault: true,
+    // 性能与交互：让库的事件监听尽量走 passive（更顺滑），
+    // 默认滚动由我们在画布容器上统一拦截，避免滚轮滚动穿透到消息列表。
+    preventMouseEventsDefault: false,
+    zoomScaleSensitivity: 0.22,
     minZoom: 0.2,
     maxZoom: 20
   })
@@ -197,6 +209,15 @@ async function openMermaidViewer(svgHtml) {
     svgPanZoomInstance.center()
   } catch (_) {
     // ignore
+  }
+
+  // 统一拦截滚轮默认滚动（只阻止滚动，不阻止事件冒泡，svg-pan-zoom 仍能收到 wheel 做缩放）
+  const canvasEl = containerRef.value?.querySelector?.('.mermaid-viewer-canvas')
+  if (canvasEl && !onViewerWheel) {
+    onViewerWheel = (evt) => {
+      evt.preventDefault()
+    }
+    canvasEl.addEventListener('wheel', onViewerWheel, { passive: false, capture: true })
   }
 
   // 跟随聊天窗大小变化：聊天窗可拖拽缩放，预览层需要同步调整并通知 svg-pan-zoom。
@@ -223,6 +244,34 @@ async function openMermaidViewer(svgHtml) {
       }
     }
     window.addEventListener('keydown', onViewerKeydown, true)
+  }
+}
+
+function mermaidViewerZoomIn() {
+  try {
+    svgPanZoomInstance?.zoomIn?.()
+  } catch (_) {
+    // ignore
+  }
+}
+
+function mermaidViewerZoomOut() {
+  try {
+    svgPanZoomInstance?.zoomOut?.()
+  } catch (_) {
+    // ignore
+  }
+}
+
+function mermaidViewerReset() {
+  if (!svgPanZoomInstance) return
+  try {
+    svgPanZoomInstance.reset()
+    svgPanZoomInstance.resize()
+    svgPanZoomInstance.fit()
+    svgPanZoomInstance.center()
+  } catch (_) {
+    // ignore
   }
 }
 
@@ -597,6 +646,17 @@ function handleKeydown(e) {
           <div class="mermaid-viewer">
             <button class="mermaid-viewer-close" @click="closeMermaidViewer">关闭</button>
             <div class="mermaid-viewer-canvas" v-html="mermaidViewerSvg"></div>
+            <div class="mermaid-viewer-toolbar" role="toolbar" aria-label="Mermaid 缩放工具">
+              <button class="mermaid-toolbtn" type="button" title="放大" @click="mermaidViewerZoomIn">
+                <ZoomIn :size="16" />
+              </button>
+              <button class="mermaid-toolbtn" type="button" title="缩小" @click="mermaidViewerZoomOut">
+                <ZoomOut :size="16" />
+              </button>
+              <button class="mermaid-toolbtn" type="button" title="重置" @click="mermaidViewerReset">
+                <RotateCcw :size="16" />
+              </button>
+            </div>
           </div>
         </div>
         
