@@ -323,6 +323,17 @@
     margin-top: 6px;
 }
 
+#fastflow-copilot-container .msg-markdown a {
+    color: var(--accent-neon);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    word-break: break-word;
+}
+
+#fastflow-copilot-container .msg-markdown a:hover {
+    text-decoration-thickness: 2px;
+}
+
 #fastflow-copilot-container .msg-markdown .msg-table-wrap {
     margin-top: 10px;
     width: 100%;
