@@ -299,6 +299,14 @@
 #fastflow-copilot-container .msg-markdown h5,
 #fastflow-copilot-container .msg-markdown h6 { font-size: 14px; }
 
+#fastflow-copilot-container .msg-markdown hr {
+    /* Markdown 的 `---` 会渲染为 <hr>，默认样式会显得很“紧”和突兀 */
+    border: 0;
+    height: 1px;
+    background: color-mix(in srgb, var(--border-subtle) 70%, transparent);
+    margin: 12px 0;
+}
+
 #fastflow-copilot-container .msg-markdown blockquote {
     margin: 8px 0 0;
     padding: 8px 10px;
@@ -313,17 +321,6 @@
 
 #fastflow-copilot-container .msg-markdown blockquote p + p {
     margin-top: 6px;
-}
-
-#fastflow-copilot-container .msg-markdown a {
-    color: var(--accent-neon);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-    word-break: break-word;
-}
-
-#fastflow-copilot-container .msg-markdown a:hover {
-    text-decoration-thickness: 2px;
 }
 
 #fastflow-copilot-container .msg-markdown .msg-table-wrap {
