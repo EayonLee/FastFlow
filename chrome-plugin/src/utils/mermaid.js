@@ -42,24 +42,9 @@ export function hashMermaidSource(source) {
   return `mmd-${hash.toString(16)}`
 }
 
-/**
- * 判断当前 Mermaid source 是否属于我们允许渲染的子集。
- * 目的：
- * - 避免渲染饼图/时序图等导致额外模块加载与错误
- * - 与后端提示词保持一致：只画最基础的 graph TB/TD
- * @param {string} source
- * @returns {boolean}
- */
-export function isSupportedMermaidSource(source) {
-  const lines = String(source || '')
-    .split('\n')
-    .map((l) => String(l || '').trim())
-    .filter(Boolean)
-  if (lines.length === 0) return false
-  const first = lines[0].toLowerCase()
-  // 只允许最常用的 flowchart/graph 入口，其他全部视为不支持（仍以代码块展示）
-  return first.startsWith('graph ') || first === 'graph' || first.startsWith('flowchart ')
-}
+// 注意：这里不限制 Mermaid 语法类型。
+// 业务层（后端提示词）可以建议“优先画 graph/flowchart”，但前端渲染层应尽量通用，
+// 否则用户画饼图/时序图等会出现“看起来像不支持”的割裂体验。
 
 function escapeHtml(text) {
   return String(text || '')
@@ -84,7 +69,7 @@ export function getCachedMermaidSvg(source) {
   return _svgCache.get(key) || null
 }
 
-async function renderMermaidSourceToSvg(source) {
+async function renderMermaidSourceToSvg(source, svgContainingElement) {
   const key = hashMermaidSource(source)
   const cached = _svgCache.get(key)
   if (cached) return cached
@@ -103,7 +88,8 @@ async function renderMermaidSourceToSvg(source) {
       renderMermaidInElement.__inited = true
     }
 
-    const { svg } = await mermaid.render(createSvgId(), source)
+    // mermaidAPI.render 的第三个参数可以提供“SVG 容器元素”，用于某些图类型计算尺寸/布局。
+    const { svg } = await mermaid.render(createSvgId(), source, svgContainingElement)
     _svgCache.set(key, svg)
     return svg
   })()
@@ -135,14 +121,7 @@ export async function renderMermaidInElement(rootEl) {
         continue
       }
 
-      // 只渲染我们允许的 Mermaid 子集，其余保持代码块展示（避免额外模块加载/错误）。
-      if (!isSupportedMermaidSource(source)) {
-        block.setAttribute('data-rendered', 'unsupported')
-        block.insertAdjacentHTML('beforeend', '<div class="msg-mermaid-error">仅支持渲染 graph/flowchart 流程图。</div>')
-        continue
-      }
-
-      const svg = await renderMermaidSourceToSvg(source)
+      const svg = await renderMermaidSourceToSvg(source, block)
       block.innerHTML = svg
       block.setAttribute('data-rendered', '1')
     } catch (e) {

@@ -104,6 +104,51 @@ const streamTypewriter = useStreamTypewriter({
   }
 })
 
+// Mermaid 放大查看（拖拽 + 缩放）
+const mermaidViewerOpen = ref(false)
+const mermaidViewerSvg = ref('')
+let svgPanZoomInstance = null
+
+async function ensureSvgPanZoom() {
+  // 按需加载，避免不使用时增加首包体积
+  const mod = await import('svg-pan-zoom')
+  return mod.default || mod
+}
+
+function closeMermaidViewer() {
+  mermaidViewerOpen.value = false
+  mermaidViewerSvg.value = ''
+  if (svgPanZoomInstance) {
+    try {
+      svgPanZoomInstance.destroy()
+    } catch (_) {
+      // ignore
+    }
+    svgPanZoomInstance = null
+  }
+}
+
+async function openMermaidViewer(svgHtml) {
+  mermaidViewerSvg.value = svgHtml || ''
+  mermaidViewerOpen.value = true
+
+  await nextTick()
+  // Chat UI 挂载在 Shadow DOM 内，这里从宿主容器定位到预览区域中的 svg。
+  const host = document.getElementById('fastflow-copilot-container')
+  const svgEl = host?.shadowRoot?.querySelector('.mermaid-viewer svg')
+  if (!svgEl) return
+
+  const svgPanZoom = await ensureSvgPanZoom()
+  svgPanZoomInstance = svgPanZoom(svgEl, {
+    zoomEnabled: true,
+    controlIconsEnabled: true,
+    fit: true,
+    center: true,
+    minZoom: 0.2,
+    maxZoom: 20
+  })
+}
+
 // 创建消息对象（统一时间格式）
 function createMessage(content, type, extra = {}) {
   return {
@@ -167,6 +212,7 @@ onUnmounted(() => {
   // 清理流式打字机定时器
   streamTypewriter.cleanup()
   resizer.cleanup()
+  closeMermaidViewer()
 })
 
 watch(isAuthed, async (val) => {
@@ -251,6 +297,19 @@ function scheduleMermaidRender() {
       renderMermaidInElement(messagesContainer.value)
     })
   }, 300)
+}
+
+function handleMessagesClick(e) {
+  const target = e?.target
+  if (!target) return
+  const mermaidBlock = target.closest?.('.msg-mermaid')
+  if (!mermaidBlock) return
+
+  const svgEl = mermaidBlock.querySelector?.('svg')
+  if (!svgEl) return
+
+  // 放大查看：复用当前渲染结果，避免重复渲染带来的布局差异与性能开销
+  openMermaidViewer(svgEl.outerHTML)
 }
 
 // 添加消息辅助函数
@@ -422,7 +481,7 @@ function handleKeydown(e) {
         />
         
         <!-- 消息区域 -->
-        <div class="messages-area" ref="messagesContainer">
+        <div class="messages-area" ref="messagesContainer" @click="handleMessagesClick">
           <div 
             v-for="msg in messages" 
             :key="msg.id" 
@@ -452,6 +511,14 @@ function handleKeydown(e) {
                 <div v-else class="msg-markdown" v-html="renderMessageContent(msg.content)"></div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- Mermaid 放大查看（支持拖拽与缩放） -->
+        <div v-if="mermaidViewerOpen" class="mermaid-viewer-overlay" @click.self="closeMermaidViewer">
+          <div class="mermaid-viewer">
+            <button class="mermaid-viewer-close" @click="closeMermaidViewer">关闭</button>
+            <div class="mermaid-viewer-canvas" v-html="mermaidViewerSvg"></div>
           </div>
         </div>
         

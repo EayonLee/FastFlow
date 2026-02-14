@@ -1,6 +1,6 @@
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js/lib/common'
-import { getCachedMermaidSvg, hashMermaidSource, isSupportedMermaidSource } from '@/utils/mermaid.js'
+import { getCachedMermaidSvg, hashMermaidSource } from '@/utils/mermaid.js'
 
 function escapeHtml(text) {
   return String(text || '')
@@ -52,12 +52,9 @@ md.renderer.rules.fence = function fence(tokens, idx, options, env, self) {
     }
 
     const escapedSource = escapeHtml(source)
-    const supported = isSupportedMermaidSource(normalizedSource)
-    const hint = supported ? '' : '<div class="msg-mermaid-error">仅支持渲染 graph/flowchart 流程图。</div>'
     return [
       `<div class="msg-mermaid" data-rendered="0" data-key="${escapeHtml(key)}">`,
       `<pre class="msg-code-block"><code class="language-mermaid">${escapedSource}</code></pre>`,
-      hint,
       '</div>'
     ].join('')
   }

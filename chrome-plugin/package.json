@@ -13,6 +13,7 @@
     "lucide-vue-next": "^0.344.0",
     "markdown-it": "^14.1.1",
     "mermaid": "^11.12.2",
+    "svg-pan-zoom": "^3.6.2",
     "validator": "^13.15.26",
     "vue": "^3.4.21"
   },
