@@ -118,11 +118,14 @@ async function renderMermaidSourceToSvg(source) {
     if (!renderMermaidInElement.__inited) {
       mermaid.initialize({
         startOnLoad: false,
-        // 关键：使用 Mermaid 官方的 sandbox 渲染模式。
-        // sandbox 模式会把渲染过程放到一个临时 iframe 文档中，能显著降低：
-        // 1) 不同页面脚本/插件对 DOM 的干扰
-        // 2) 某些图类型渲染器“强依赖 body 上下文”的兼容问题
-        securityLevel: 'sandbox',
+        // 关键：必须输出“内联 SVG”，否则会得到 sandbox iframe 包装，
+        // 进而无法在消息区域中做点击放大与 svg-pan-zoom 交互。
+        //
+        // 我们通过：
+        // 1) 渲染沙箱挂在 document.body 下（见 getOrCreateRenderSandbox）
+        // 2) 关闭 htmlLabels
+        // 来保证 strict 模式下的稳定性。
+        securityLevel: 'strict',
         // 关键：关闭 htmlLabels，避免 Mermaid 走 foreignObject + DOM 测量路径。
         // 在浏览器插件（Shadow DOM + 各类页面/插件干扰）环境下，htmlLabels 很容易触发
         // “div.node() 为空 -> getBoundingClientRect 报错”一类问题。

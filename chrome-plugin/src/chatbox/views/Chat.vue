@@ -351,15 +351,16 @@ function scheduleMermaidRender() {
 }
 
 function handleMessagesClick(e) {
+  const path = typeof e?.composedPath === 'function' ? e.composedPath() : []
+  const fromPath = path.find((el) => el && el.classList && el.classList.contains('msg-mermaid'))
   const target = e?.target
-  if (!target) return
-  const mermaidBlock = target.closest?.('.msg-mermaid')
+  const mermaidBlock = fromPath || target?.closest?.('.msg-mermaid')
   if (!mermaidBlock) return
 
+  // 只支持“内联 SVG”的图放大；如果是 iframe（sandbox 输出），这里会找不到 svg。
   const svgEl = mermaidBlock.querySelector?.('svg')
   if (!svgEl) return
 
-  // 放大查看：复用当前渲染结果，避免重复渲染带来的布局差异与性能开销
   openMermaidViewer(svgEl.outerHTML)
 }
 
