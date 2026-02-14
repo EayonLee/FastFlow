@@ -151,13 +151,41 @@ function normalizeLooseTables(markdown) {
 }
 
 /**
+ * 将“常见的 HTML 实体转义”还原为原字符（仅限少量必要集合）。
+ *
+ * 背景：
+ * - 有些后端/网关会把模型输出做 HTML 实体转义（例如 `>` 变成 `&gt;`，反引号变成 `&#96;`）
+ * - 这会导致 Markdown 语法标记失效：`>` 无法识别为 blockquote，`...` 无法识别为行内 code
+ *
+ * 安全性：
+ * - markdown-it 已配置 `html:false`，即使还原了 `<`/`>` 也不会执行 HTML
+ * - 这里仅做最小集合的反转义，避免误伤普通文本
+ */
+function decodeCommonHtmlEntitiesForMarkdown(text) {
+  const s = String(text || '')
+  // 先反转义 &amp;，以支持双重转义（例如 &amp;gt; -> &gt; -> >）
+  return s
+    .replace(/&amp;/gi, '&')
+    .replace(/&gt;/gi, '>')
+    .replace(/&lt;/gi, '<')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&#96;/g, '`')
+    .replace(/&#x60;/gi, '`')
+}
+
+/**
  * 将 Markdown 文本渲染为安全 HTML。
  * @param {string} markdown
  * @returns {string}
  */
 export function renderMarkdown(markdown) {
-  const html = md.render(normalizeLooseTables(markdown))
-  // 安全处理：markdown-it 关闭了 html（html:false），因此诸如 <br/> 会被转义成 &lt;br/&gt;。
+  const normalized = decodeCommonHtmlEntitiesForMarkdown(markdown)
+  const html = md.render(normalizeLooseTables(normalized))
+
+  // markdown-it 关闭了 HTML（html:false），因此诸如 <br/> 会被转义成 &lt;br/&gt;。
   // 但我们希望允许“仅 br 标签”用于排版（例如提示块中使用 <br/>），所以仅反转义 br。
   return html.replace(/&lt;br\s*\/?\s*&gt;/gi, '<br/>')
 }
