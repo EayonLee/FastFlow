@@ -18,6 +18,12 @@ const _svgCache = new Map()
 // source_hash -> Promise<string>（防止并发重复渲染同一段）
 const _svgPromiseCache = new Map()
 
+// Mermaid 渲染需要真实 DOM 来测量文本/布局（尤其是 htmlLabels/foreignObject）。
+// 我们的聊天 UI 挂载在 Shadow DOM 内，直接在 Shadow DOM 容器上渲染时，
+// Mermaid 内部有概率拿不到期望的节点（出现 div.node() 为 null，进而 getBoundingClientRect 报错）。
+// 因此统一使用“主文档的离屏渲染沙箱”进行渲染，再把 SVG 字符串注入 Shadow DOM。
+let _renderSandboxEl = null
+
 async function loadMermaid() {
   if (!mermaidApiPromise) {
     mermaidApiPromise = import('mermaid').then((mod) => mod.default || mod)
@@ -42,10 +48,6 @@ export function hashMermaidSource(source) {
   return `mmd-${hash.toString(16)}`
 }
 
-// 注意：这里不限制 Mermaid 语法类型。
-// 业务层（后端提示词）可以建议“优先画 graph/flowchart”，但前端渲染层应尽量通用，
-// 否则用户画饼图/时序图等会出现“看起来像不支持”的割裂体验。
-
 function escapeHtml(text) {
   return String(text || '')
     .replace(/&/g, '&amp;')
@@ -59,6 +61,29 @@ function createSvgId() {
   return `mermaid-svg-${Math.random().toString(16).slice(2)}-${Date.now()}`
 }
 
+function getOrCreateRenderSandbox() {
+  if (_renderSandboxEl && document.contains(_renderSandboxEl)) {
+    return _renderSandboxEl
+  }
+
+  const el = document.createElement('div')
+  el.id = 'fastflow-mermaid-render-sandbox'
+  // 离屏但可测量：不要 display:none，否则 getBBox/getBoundingClientRect 可能为 0 或异常。
+  Object.assign(el.style, {
+    position: 'fixed',
+    left: '-10000px',
+    top: '-10000px',
+    width: '1px',
+    height: '1px',
+    overflow: 'hidden',
+    visibility: 'hidden',
+    pointerEvents: 'none'
+  })
+  document.documentElement.appendChild(el)
+  _renderSandboxEl = el
+  return el
+}
+
 /**
  * 读取缓存的 SVG（如果存在）。
  * @param {string} source
@@ -69,7 +94,7 @@ export function getCachedMermaidSvg(source) {
   return _svgCache.get(key) || null
 }
 
-async function renderMermaidSourceToSvg(source, svgContainingElement) {
+async function renderMermaidSourceToSvg(source) {
   const key = hashMermaidSource(source)
   const cached = _svgCache.get(key)
   if (cached) return cached
@@ -88,9 +113,13 @@ async function renderMermaidSourceToSvg(source, svgContainingElement) {
       renderMermaidInElement.__inited = true
     }
 
-    // mermaidAPI.render 的第三个参数可以提供“SVG 容器元素”，用于某些图类型计算尺寸/布局。
-    const { svg } = await mermaid.render(createSvgId(), source, svgContainingElement)
+    const sandbox = getOrCreateRenderSandbox()
+    sandbox.innerHTML = ''
+
+    // Mermaid 官方渲染 API：使用主文档离屏容器进行渲染，避免 Shadow DOM 下的测量/查询问题。
+    const { svg } = await mermaid.render(createSvgId(), source, sandbox)
     _svgCache.set(key, svg)
+    sandbox.innerHTML = ''
     return svg
   })()
 
@@ -121,7 +150,7 @@ export async function renderMermaidInElement(rootEl) {
         continue
       }
 
-      const svg = await renderMermaidSourceToSvg(source, block)
+      const svg = await renderMermaidSourceToSvg(source)
       block.innerHTML = svg
       block.setAttribute('data-rendered', '1')
     } catch (e) {
