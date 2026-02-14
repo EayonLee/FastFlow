@@ -109,6 +109,7 @@ const mermaidViewerOpen = ref(false)
 const mermaidViewerSvg = ref('')
 let svgPanZoomInstance = null
 let onViewerKeydown = null
+let mermaidViewerResizeObserver = null
 
 async function ensureSvgPanZoom() {
   // 按需加载，避免不使用时增加首包体积
@@ -135,6 +136,16 @@ function closeMermaidViewer() {
       // ignore
     }
     svgPanZoomInstance = null
+  }
+
+  // 关闭预览时停止观察聊天窗尺寸变化，避免泄露
+  if (mermaidViewerResizeObserver) {
+    try {
+      mermaidViewerResizeObserver.disconnect()
+    } catch (_) {
+      // ignore
+    }
+    mermaidViewerResizeObserver = null
   }
 
   // 关闭预览时移除快捷键监听，避免污染全局按键行为
@@ -186,6 +197,21 @@ async function openMermaidViewer(svgHtml) {
     svgPanZoomInstance.center()
   } catch (_) {
     // ignore
+  }
+
+  // 跟随聊天窗大小变化：聊天窗可拖拽缩放，预览层需要同步调整并通知 svg-pan-zoom。
+  if (containerRef.value && !mermaidViewerResizeObserver) {
+    mermaidViewerResizeObserver = new ResizeObserver(() => {
+      if (!svgPanZoomInstance) return
+      try {
+        svgPanZoomInstance.resize()
+        svgPanZoomInstance.fit()
+        svgPanZoomInstance.center()
+      } catch (_) {
+        // ignore
+      }
+    })
+    mermaidViewerResizeObserver.observe(containerRef.value)
   }
 
   // Esc 关闭预览

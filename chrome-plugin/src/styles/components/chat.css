@@ -426,21 +426,20 @@
 
 /* Mermaid 放大预览：全屏遮罩 + 画布（SVG 内部由 svg-pan-zoom 控制拖拽缩放） */
 #fastflow-copilot-container .mermaid-viewer-overlay {
-    position: fixed;
+    /* 预览层必须“跟随聊天窗大小”，因此用 absolute 覆盖整个聊天窗 */
+    position: absolute;
     inset: 0;
     z-index: 2147483647;
     background: rgba(0, 0, 0, 0.65);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
+    display: block;
+    padding: 0;
 }
 
 #fastflow-copilot-container .mermaid-viewer {
     position: relative;
-    width: min(1100px, calc(100vw - 32px));
-    height: min(720px, calc(100vh - 32px));
-    border-radius: 12px;
+    width: 100%;
+    height: 100%;
+    border-radius: 20px; /* 与聊天窗外框保持一致 */
     border: 1px solid var(--border-subtle);
     background: var(--bg-app);
     overflow: hidden;
