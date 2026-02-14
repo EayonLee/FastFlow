@@ -84,7 +84,12 @@ function getOrCreateRenderSandbox() {
     visibility: 'hidden',
     pointerEvents: 'none'
   })
-  document.documentElement.appendChild(el)
+  // 关键：必须挂在 body 下。
+  // Mermaid 的不少图类型渲染器内部会直接 select('body') 来取 svg 容器（例如 timeline 等），
+  // 如果我们把沙箱挂到 <html>（documentElement）而不是 <body>，这些渲染器会拿不到 svg，
+  // 进而出现 `...node() === null`，导致 getComputedTextLength/getBoundingClientRect 等空指针错误。
+  const parent = document.body || document.documentElement
+  parent.appendChild(el)
   _renderSandboxEl = el
   return el
 }
@@ -113,7 +118,11 @@ async function renderMermaidSourceToSvg(source) {
     if (!renderMermaidInElement.__inited) {
       mermaid.initialize({
         startOnLoad: false,
-        securityLevel: 'strict',
+        // 关键：使用 Mermaid 官方的 sandbox 渲染模式。
+        // sandbox 模式会把渲染过程放到一个临时 iframe 文档中，能显著降低：
+        // 1) 不同页面脚本/插件对 DOM 的干扰
+        // 2) 某些图类型渲染器“强依赖 body 上下文”的兼容问题
+        securityLevel: 'sandbox',
         // 关键：关闭 htmlLabels，避免 Mermaid 走 foreignObject + DOM 测量路径。
         // 在浏览器插件（Shadow DOM + 各类页面/插件干扰）环境下，htmlLabels 很容易触发
         // “div.node() 为空 -> getBoundingClientRect 报错”一类问题。
