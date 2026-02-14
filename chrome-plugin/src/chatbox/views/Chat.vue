@@ -108,6 +108,7 @@ const streamTypewriter = useStreamTypewriter({
 const mermaidViewerOpen = ref(false)
 const mermaidViewerSvg = ref('')
 let svgPanZoomInstance = null
+let onViewerKeydown = null
 
 async function ensureSvgPanZoom() {
   // 按需加载，避免不使用时增加首包体积
@@ -126,6 +127,12 @@ function closeMermaidViewer() {
     }
     svgPanZoomInstance = null
   }
+
+  // 关闭预览时移除快捷键监听，避免污染全局按键行为
+  if (onViewerKeydown) {
+    window.removeEventListener('keydown', onViewerKeydown, true)
+    onViewerKeydown = null
+  }
 }
 
 async function openMermaidViewer(svgHtml) {
@@ -133,20 +140,57 @@ async function openMermaidViewer(svgHtml) {
   mermaidViewerOpen.value = true
 
   await nextTick()
-  // Chat UI 挂载在 Shadow DOM 内，这里从宿主容器定位到预览区域中的 svg。
-  const host = document.getElementById('fastflow-copilot-container')
-  const svgEl = host?.shadowRoot?.querySelector('.mermaid-viewer svg')
+  // 关键：我们本身就在 Shadow DOM 内，不能用 document.getElementById + shadowRoot 去找节点，
+  // 直接用组件自身的容器 ref 来定位即可。
+  const svgEl = containerRef.value?.querySelector('.mermaid-viewer-canvas svg')
   if (!svgEl) return
 
   const svgPanZoom = await ensureSvgPanZoom()
+
+  // 重新打开时确保销毁旧实例，避免事件/状态叠加
+  if (svgPanZoomInstance) {
+    try {
+      svgPanZoomInstance.destroy()
+    } catch (_) {
+      // ignore
+    }
+    svgPanZoomInstance = null
+  }
+
   svgPanZoomInstance = svgPanZoom(svgEl, {
     zoomEnabled: true,
     controlIconsEnabled: true,
     fit: true,
     center: true,
+    panEnabled: true,
+    mouseWheelZoomEnabled: true,
+    dblClickZoomEnabled: true,
+    preventMouseEventsDefault: true,
+    // 移动端/触摸屏：允许双指缩放与拖拽
+    touchEnabled: true,
     minZoom: 0.2,
     maxZoom: 20
   })
+
+  // 初次打开时显式做一次布局校准，避免容器尺寸变化导致初始视图不居中/不适配
+  try {
+    svgPanZoomInstance.resize()
+    svgPanZoomInstance.fit()
+    svgPanZoomInstance.center()
+  } catch (_) {
+    // ignore
+  }
+
+  // Esc 关闭预览
+  if (!onViewerKeydown) {
+    onViewerKeydown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        closeMermaidViewer()
+      }
+    }
+    window.addEventListener('keydown', onViewerKeydown, true)
+  }
 }
 
 // 创建消息对象（统一时间格式）

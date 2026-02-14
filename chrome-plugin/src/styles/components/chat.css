@@ -415,6 +415,7 @@
     display: block;
     max-width: 100%;
     height: auto;
+    cursor: zoom-in;
 }
 
 #fastflow-copilot-container .msg-markdown .msg-mermaid .msg-mermaid-error {
