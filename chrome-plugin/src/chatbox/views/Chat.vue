@@ -1,6 +1,6 @@
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { Bot, MessageSquare, Send, Copy, Check, ZoomIn, ZoomOut, RotateCcw } from 'lucide-vue-next'
+import { Bot, MessageSquare, Send, Copy, Check, ZoomIn, ZoomOut, RotateCcw, X } from 'lucide-vue-next'
 import FlowSelect from '@/components/FlowSelect.vue'
 import Header from '@/components/Header.vue'
 import { useCopyFeedback } from '@/composables/useCopyFeedback.js'
@@ -597,7 +597,7 @@ function handleKeydown(e) {
     <div 
       v-if="isAuthed"
       id="fastflow-copilot-container" 
-      :class="{ active: isOpen, resizing: isResizing }"
+      :class="{ active: isOpen, resizing: isResizing, 'mermaid-viewer-open': mermaidViewerOpen }"
       ref="containerRef"
     >
       <div class="chat-main-interface">
@@ -644,7 +644,9 @@ function handleKeydown(e) {
         <!-- Mermaid 放大查看（支持拖拽与缩放） -->
         <div v-if="mermaidViewerOpen" class="mermaid-viewer-overlay" @click.self="closeMermaidViewer">
           <div class="mermaid-viewer">
-            <button class="mermaid-viewer-close" @click="closeMermaidViewer">关闭</button>
+            <button class="mermaid-viewer-close" type="button" title="关闭 (Esc)" @click="closeMermaidViewer">
+              <X :size="16" />
+            </button>
             <div class="mermaid-viewer-canvas" v-html="mermaidViewerSvg"></div>
             <div class="mermaid-viewer-toolbar" role="toolbar" aria-label="Mermaid 缩放工具">
               <button class="mermaid-toolbtn" type="button" title="放大" @click="mermaidViewerZoomIn">

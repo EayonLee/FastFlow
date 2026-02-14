@@ -132,6 +132,7 @@
 
 /* Inner Screen Interface */
 .chat-main-interface {
+  position: relative; /* 让内部 overlay 以此为定位基准 */
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -148,6 +149,11 @@
   /* Inner shadow for depth */
   box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
   transition: background-color 0.3s;
+}
+
+/* 只在打开 Mermaid 预览时裁剪内屏，避免影响下拉框等需要溢出的组件 */
+#fastflow-copilot-container.mermaid-viewer-open .chat-main-interface {
+  overflow: hidden;
 }
 
 /* Header */
@@ -429,14 +435,14 @@
 
 /* Mermaid 放大预览：全屏遮罩 + 画布（SVG 内部由 svg-pan-zoom 控制拖拽缩放） */
 #fastflow-copilot-container .mermaid-viewer-overlay {
-    /* 预览层必须“跟随聊天窗大小”，因此用 absolute 覆盖整个聊天窗 */
+    /* 预览层覆盖“内屏”（chat-main-interface），避免占用外层 bezel padding 导致亮色主题角落黑三角 */
     position: absolute;
     inset: 0;
     z-index: 2147483647;
     background: rgba(0, 0, 0, 0.65);
     display: block;
     padding: 0;
-    border-radius: inherit;
+    border-radius: 12px; /* 对齐内屏圆角 */
 }
 
 #fastflow-copilot-container .mermaid-viewer {
@@ -455,12 +461,34 @@
     top: 10px;
     right: 10px;
     z-index: 2;
-    padding: 6px 10px;
-    border-radius: 8px;
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
     border: 1px solid var(--border-subtle);
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--bg-panel) 72%, transparent);
     color: var(--text-primary);
     cursor: pointer;
+    transition: transform 0.12s ease, background-color 0.15s ease, border-color 0.15s ease;
+    -webkit-backdrop-filter: blur(10px) saturate(140%);
+    backdrop-filter: blur(10px) saturate(140%);
+}
+
+#fastflow-copilot-container .mermaid-viewer-close:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--accent-neon) 40%, transparent);
+    background: color-mix(in srgb, var(--accent-neon-dim) 55%, var(--bg-panel));
+}
+
+#fastflow-copilot-container .mermaid-viewer-close:active {
+    transform: translateY(0);
+}
+
+#fastflow-copilot-container .mermaid-viewer-close:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent-neon) 60%, transparent);
+    outline-offset: 2px;
 }
 
 #fastflow-copilot-container .mermaid-viewer-canvas {
