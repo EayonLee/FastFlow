@@ -14,9 +14,10 @@ import { getModelConfigs } from '@/services/modelConfig.js'
 import { Layout } from '@/utils/layout.js'
 import { formatDateTime } from '@/utils/time.js'
 import { renderMarkdown } from '@/utils/markdown.js'
-import { getMermaidSourceByKey, renderMermaidInElement } from '@/utils/mermaid.js'
+import { getMermaidSourceByKey, renderMermaidInElement, renderMermaidSource } from '@/utils/mermaid.js'
 import { generateUuid32 } from '@/utils/uuid.js'
 import { useMermaidThemeSync } from '@/chatbox/composables/useMermaidThemeSync.js'
+import { themeManager } from '@/utils/themeManager.js'
 
 // 存储 key（用于记住聊天框尺寸）
 const CHAT_SIZE_STORAGE_KEY = 'chat_box_size'
@@ -113,6 +114,8 @@ const streamTypewriter = useStreamTypewriter({
 const mermaidViewerOpen = ref(false)
 const mermaidViewerSvg = ref('')
 const mermaidViewerSource = ref('')
+let unsubscribeViewerTheme = null
+let viewerThemeScheduled = false
 
 function closeMermaidViewer() {
   mermaidViewerOpen.value = false
@@ -123,6 +126,21 @@ function closeMermaidViewer() {
 function openMermaidViewer(svgHtml) {
   mermaidViewerSvg.value = svgHtml || ''
   mermaidViewerOpen.value = true
+}
+
+function scheduleViewerRerender() {
+  if (viewerThemeScheduled) return
+  viewerThemeScheduled = true
+  queueMicrotask(async () => {
+    viewerThemeScheduled = false
+    if (!mermaidViewerOpen.value) return
+    const src = String(mermaidViewerSource.value || '').trim()
+    if (!src) return
+    const svg = await renderMermaidSource(src)
+    if (!svg) return
+    // 替换 SVG 后 MermaidViewer 内部会重新初始化 svg-pan-zoom
+    mermaidViewerSvg.value = svg
+  })
 }
 
 // 创建消息对象（统一时间格式）
@@ -177,6 +195,12 @@ onMounted(async () => {
     }
   })
   await authGuard.start()
+
+  // 主题切换时：如果 Mermaid 放大预览打开，则按新主题重渲染预览图
+  await themeManager.ready
+  unsubscribeViewerTheme = themeManager.subscribe(() => {
+    scheduleViewerRerender()
+  })
 })
 
 onUnmounted(() => {
@@ -188,6 +212,12 @@ onUnmounted(() => {
   // 清理流式打字机定时器
   streamTypewriter.cleanup()
   resizer.cleanup()
+
+  if (unsubscribeViewerTheme) {
+    unsubscribeViewerTheme()
+    unsubscribeViewerTheme = null
+  }
+
   closeMermaidViewer()
 })
 

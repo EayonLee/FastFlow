@@ -213,6 +213,20 @@ async function renderMermaidSourceToSvg(source) {
 }
 
 /**
+ * 将 Mermaid source 渲染为 SVG 字符串（公开方法）。
+ * 用途：
+ * - 放大预览在主题切换时需要按新主题重渲染
+ * - 某些场景需要单独渲染某一张图，而不是扫描整个容器
+ * @param {string} source
+ * @returns {Promise<string>}
+ */
+export async function renderMermaidSource(source) {
+  const s = String(source || '').trim()
+  if (!s) return ''
+  return await renderMermaidSourceToSvg(s)
+}
+
+/**
  * 在指定根节点内渲染所有未渲染的 Mermaid 图。
  * @param {HTMLElement} rootEl
  */
