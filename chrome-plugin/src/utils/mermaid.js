@@ -8,8 +8,6 @@
  * - 安全：使用 strict 安全级别；渲染失败则保留原始代码块展示。
  */
 
-import { themeManager } from '@/utils/themeManager.js'
-
 // Mermaid ESM 入口会做较多懒加载，这里用缓存 + 延迟加载来保证：
 // 1) 没有 mermaid 块就不加载依赖
 // 2) 同一段图的渲染结果可复用，避免流式更新时反复渲染/反复报错
@@ -50,33 +48,6 @@ export function hashMermaidSource(source) {
     hash = (hash * 0x01000193) >>> 0
   }
   return `mmd-${hash.toString(16)}`
-}
-
-/**
- * 获取当前“已解析”的主题（只返回 light/dark）。
- * 说明：Content Script 环境下主题可能只挂在 Shadow Host 上，
- * 因此不依赖 DOM 的 data-theme，而是直接使用 ThemeManager 的当前状态。
- * @returns {"light"|"dark"}
- */
-function getResolvedTheme() {
-  try {
-    const resolved = themeManager?.resolveTheme?.()
-    return resolved === 'light' ? 'light' : 'dark'
-  } catch (_) {
-    // 兜底：默认暗色（插件默认主题也是 dark）
-    return 'dark'
-  }
-}
-
-/**
- * Mermaid 的 SVG 缓存需要“主题维度”参与，否则会出现：
- * - 深色主题下仍命中浅色主题缓存，连线/文字颜色不适配
- * @param {string} source
- * @returns {string}
- */
-function getSvgCacheKey(source) {
-  const theme = getResolvedTheme()
-  return hashMermaidSource(`${theme}::${String(source || '')}`)
 }
 
 function escapeHtml(text) {
@@ -131,7 +102,7 @@ function getOrCreateRenderSandbox() {
  * @returns {string|null}
  */
 export function getCachedMermaidSvg(source) {
-  const key = getSvgCacheKey(source)
+  const key = hashMermaidSource(source)
   return _svgCache.get(key) || null
 }
 
@@ -160,7 +131,7 @@ export function getMermaidSourceByKey(key) {
 }
 
 async function renderMermaidSourceToSvg(source) {
-  const key = getSvgCacheKey(source)
+  const key = hashMermaidSource(source)
   const cached = _svgCache.get(key)
   if (cached) return cached
 
@@ -169,16 +140,39 @@ async function renderMermaidSourceToSvg(source) {
 
   const p = (async () => {
     const mermaid = await loadMermaid()
-    // Mermaid 的主题需要随插件主题切换；否则深色主题下可能出现“黑色连线看不清”。
-    // 同时我们必须保证：securityLevel/htmlLabels 等安全与稳定性配置不被覆盖。
-    const resolvedTheme = getResolvedTheme()
-    const desiredMermaidTheme = resolvedTheme === 'dark' ? 'dark' : 'default'
-
-    // 只在“首次”或“主题变化”时重置 Mermaid 全局配置。
-    if (!renderMermaidInElement.__inited || renderMermaidInElement.__theme !== desiredMermaidTheme) {
+    /**
+     * 关键设计：
+     * - Mermaid 图不应该“切主题就强制重渲染”（会卡、也可能出现状态不同步）
+     * - 使用 Mermaid 官方 `theme: "base"` + `themeVariables` 直接引用 CSS 变量，
+     *   让 SVG 内的样式通过 var(--xxx) 随主题实时变化。
+     *
+     * 好处：
+     * - 主题切换时：聊天框背景/图连线/文字颜色即时变化（不需要重新 render）
+     * - 避免频繁 initialize 触发内部全局状态变化
+     */
+    if (!renderMermaidInElement.__inited) {
       mermaid.initialize({
         startOnLoad: false,
-        theme: desiredMermaidTheme,
+        theme: 'base',
+        themeVariables: {
+          // 通用：线条/文字在暗色背景下必须足够亮
+          lineColor: 'var(--text-secondary)',
+          textColor: 'var(--text-primary)',
+          // Flowchart 相关（types.d.ts / flowchart/styles.d.ts）
+          arrowheadColor: 'var(--text-secondary)',
+          mainBkg: 'var(--bg-surface)',
+          nodeBorder: 'var(--border-subtle)',
+          nodeTextColor: 'var(--text-primary)',
+          edgeLabelBackground: 'var(--bg-panel)',
+          clusterBkg: 'var(--bg-panel)',
+          clusterBorder: 'var(--border-subtle)',
+          border2: 'var(--border-subtle)',
+          tertiaryColor: 'var(--bg-surface)',
+          titleColor: 'var(--text-primary)',
+          // 错误渲染（保持可读）
+          errorBkgColor: 'var(--bg-panel)',
+          errorTextColor: 'var(--danger)'
+        },
         // 关键：必须输出“内联 SVG”，否则会得到 sandbox iframe 包装，
         // 进而无法在消息区域中做点击放大与 svg-pan-zoom 交互。
         //
@@ -195,7 +189,6 @@ async function renderMermaidSourceToSvg(source) {
         flowchart: { htmlLabels: false }
       })
       renderMermaidInElement.__inited = true
-      renderMermaidInElement.__theme = desiredMermaidTheme
     }
 
     const sandbox = getOrCreateRenderSandbox()
