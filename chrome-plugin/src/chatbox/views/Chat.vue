@@ -113,7 +113,16 @@ let onViewerKeydown = null
 async function ensureSvgPanZoom() {
   // 按需加载，避免不使用时增加首包体积
   const mod = await import('svg-pan-zoom')
-  return mod.default || mod
+  // 关键：svg-pan-zoom 是 CJS 包，Vite 在不同构建路径下可能产生不同的导出形态：
+  // 1) { default: fn }
+  // 2) { s: { default: fn } }（当前构建产物就是这种）
+  // 这里不做“兜底”，而是显式选择“函数导出”，否则直接抛错，避免静默失败导致“看起来没生效”。
+  const candidates = [mod?.default, mod?.s?.default, mod?.s, mod]
+  const fn = candidates.find((c) => typeof c === 'function')
+  if (!fn) {
+    throw new Error('svg-pan-zoom 模块未导出可调用函数（构建导出形态不符合预期）')
+  }
+  return fn
 }
 
 function closeMermaidViewer() {
@@ -166,8 +175,6 @@ async function openMermaidViewer(svgHtml) {
     mouseWheelZoomEnabled: true,
     dblClickZoomEnabled: true,
     preventMouseEventsDefault: true,
-    // 移动端/触摸屏：允许双指缩放与拖拽
-    touchEnabled: true,
     minZoom: 0.2,
     maxZoom: 20
   })
