@@ -384,7 +384,8 @@
 }
 
 #fastflow-copilot-container .msg-markdown pre.msg-code-block {
-    margin: 8px 0 0 0;
+    /* fenced code block 前后留出一行间距，避免紧贴上下文内容 */
+    margin: 12px 0;
     padding: 10px 12px;
     border-radius: 8px;
     border: 1px solid var(--code-block-border);
@@ -447,7 +448,8 @@
 
 /* Mermaid 图渲染容器（由 utils/mermaid.js 将代码块替换为 SVG） */
 #fastflow-copilot-container .msg-markdown .msg-mermaid {
-    margin-top: 8px;
+    /* Mermaid 图块前后留出一行间距，避免紧贴上下文内容 */
+    margin: 12px 0;
     padding: 10px 12px;
     border-radius: 8px;
     border: 1px solid var(--code-block-border);
