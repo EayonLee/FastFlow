@@ -394,6 +394,14 @@
     overflow-x: auto;
 }
 
+#fastflow-copilot-container .msg-markdown > pre.msg-code-block:first-child {
+    margin-top: 0;
+}
+
+#fastflow-copilot-container .msg-markdown > pre.msg-code-block:last-child {
+    margin-bottom: 0;
+}
+
 #fastflow-copilot-container .msg-markdown pre.msg-code-block code {
     display: block;
     padding: 0;
@@ -456,6 +464,14 @@
     background: var(--code-block-bg);
     overflow-x: auto;
     cursor: zoom-in;
+}
+
+#fastflow-copilot-container .msg-markdown > .msg-mermaid:first-child {
+    margin-top: 0;
+}
+
+#fastflow-copilot-container .msg-markdown > .msg-mermaid:last-child {
+    margin-bottom: 0;
 }
 
 #fastflow-copilot-container .msg-markdown .msg-mermaid svg {
