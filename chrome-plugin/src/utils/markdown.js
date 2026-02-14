@@ -1,6 +1,6 @@
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js/lib/common'
-import { getCachedMermaidSvg, hashMermaidSource } from '@/utils/mermaid.js'
+import { getCachedMermaidSvg, hashMermaidSource, rememberMermaidSource } from '@/utils/mermaid.js'
 
 function escapeHtml(text) {
   return String(text || '')
@@ -44,6 +44,8 @@ md.renderer.rules.fence = function fence(tokens, idx, options, env, self) {
     const source = String(token.content || '')
     const normalizedSource = source.trim()
     const key = hashMermaidSource(normalizedSource)
+    // 记住原始 Mermaid 语句，避免后续渲染为 SVG 后丢失，导致无法“复制语句”。
+    rememberMermaidSource(key, normalizedSource)
 
     // 已渲染过的图：直接输出缓存的 SVG，避免流式更新时 DOM 重绘导致回退为代码块。
     const cachedSvg = getCachedMermaidSvg(normalizedSource)

@@ -17,6 +17,8 @@ let mermaidApiPromise = null
 const _svgCache = new Map()
 // source_hash -> Promise<string>（防止并发重复渲染同一段）
 const _svgPromiseCache = new Map()
+// key -> source（用于“复制 Mermaid 语句”等功能；避免渲染后丢失原始代码）
+const _sourceCache = new Map()
 
 // Mermaid 渲染需要真实 DOM 来测量文本/布局（尤其是 htmlLabels/foreignObject）。
 // 我们的聊天 UI 挂载在 Shadow DOM 内，直接在 Shadow DOM 容器上渲染时，
@@ -104,6 +106,30 @@ export function getCachedMermaidSvg(source) {
   return _svgCache.get(key) || null
 }
 
+/**
+ * 记住 Mermaid 原始语句（用于复制）。
+ * @param {string} key
+ * @param {string} source
+ */
+export function rememberMermaidSource(key, source) {
+  const k = String(key || '').trim()
+  const s = String(source || '')
+  if (!k || !s) return
+  // 不覆盖已有值：避免同 key 因 whitespace 差异被反复写入
+  if (!_sourceCache.has(k)) _sourceCache.set(k, s)
+}
+
+/**
+ * 通过 data-key 获取 Mermaid 原始语句。
+ * @param {string} key
+ * @returns {string|null}
+ */
+export function getMermaidSourceByKey(key) {
+  const k = String(key || '').trim()
+  if (!k) return null
+  return _sourceCache.get(k) || null
+}
+
 async function renderMermaidSourceToSvg(source) {
   const key = hashMermaidSource(source)
   const cached = _svgCache.get(key)
@@ -170,6 +196,10 @@ export async function renderMermaidInElement(rootEl) {
         block.setAttribute('data-rendered', 'empty')
         continue
       }
+
+      // 保存 source，便于放大预览时一键复制 Mermaid 语句
+      const key = block.getAttribute('data-key') || hashMermaidSource(source)
+      rememberMermaidSource(key, source)
 
       const svg = await renderMermaidSourceToSvg(source)
       block.innerHTML = svg

@@ -418,6 +418,7 @@
     border: 1px solid var(--code-block-border);
     background: var(--code-block-bg);
     overflow-x: auto;
+    cursor: zoom-in;
 }
 
 #fastflow-copilot-container .msg-markdown .msg-mermaid svg {
@@ -503,8 +504,10 @@
 }
 
 #fastflow-copilot-container .mermaid-viewer-canvas svg {
-    width: 100%;
-    height: 100%;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
     cursor: grab;
 }
 
@@ -537,6 +540,7 @@
 }
 
 #fastflow-copilot-container .mermaid-viewer-toolbar .mermaid-toolbtn {
+    position: relative; /* tooltip anchor */
     width: 36px;
     height: 36px;
     display: inline-flex;
@@ -563,6 +567,66 @@
 #fastflow-copilot-container .mermaid-viewer-toolbar .mermaid-toolbtn:focus-visible {
     outline: 2px solid color-mix(in srgb, var(--accent-neon) 60%, transparent);
     outline-offset: 2px;
+}
+
+#fastflow-copilot-container .mermaid-viewer-toolbar .mermaid-tool-sep {
+    width: 1px;
+    height: 20px;
+    align-self: center;
+    background: var(--border-subtle);
+    opacity: 0.9;
+    margin: 0 2px;
+}
+
+/* Tooltip：使用 data-tip，hover/focus 时展示 */
+#fastflow-copilot-container .mermaid-viewer-toolbar .mermaid-toolbtn[data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    right: 50%;
+    bottom: calc(100% + 10px);
+    transform: translateX(50%);
+    padding: 6px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
+    color: var(--text-primary);
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    -webkit-backdrop-filter: blur(10px) saturate(140%);
+    backdrop-filter: blur(10px) saturate(140%);
+    box-shadow: 0 10px 22px rgba(0,0,0,0.25);
+}
+
+#fastflow-copilot-container .mermaid-viewer-toolbar .mermaid-toolbtn[data-tip]::before {
+    content: '';
+    position: absolute;
+    right: 50%;
+    bottom: calc(100% + 4px);
+    transform: translateX(50%);
+    width: 10px;
+    height: 10px;
+    background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
+    border-left: 1px solid var(--border-subtle);
+    border-top: 1px solid var(--border-subtle);
+    transform: translateX(50%) rotate(45deg);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+}
+
+#fastflow-copilot-container .mermaid-viewer-toolbar .mermaid-toolbtn:hover::after,
+#fastflow-copilot-container .mermaid-viewer-toolbar .mermaid-toolbtn:focus-visible::after {
+    opacity: 1;
+    transform: translateX(50%) translateY(-2px);
+}
+
+#fastflow-copilot-container .mermaid-viewer-toolbar .mermaid-toolbtn:hover::before,
+#fastflow-copilot-container .mermaid-viewer-toolbar .mermaid-toolbtn:focus-visible::before {
+    opacity: 1;
 }
 
 .message-wrapper.ai .msg-body {

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { Bot, MessageSquare, Send, Copy, Check, ZoomIn, ZoomOut, RotateCcw, X } from 'lucide-vue-next'
+import { Bot, MessageSquare, Send, Copy, Check, ZoomIn, ZoomOut, RotateCcw, X, FileCode, ImageDown } from 'lucide-vue-next'
 import FlowSelect from '@/components/FlowSelect.vue'
 import Header from '@/components/Header.vue'
 import { useCopyFeedback } from '@/composables/useCopyFeedback.js'
@@ -13,7 +13,7 @@ import { getModelConfigs } from '@/services/modelConfig.js'
 import { Layout } from '@/utils/layout.js'
 import { formatDateTime } from '@/utils/time.js'
 import { renderMarkdown } from '@/utils/markdown.js'
-import { renderMermaidInElement } from '@/utils/mermaid.js'
+import { getMermaidSourceByKey, renderMermaidInElement } from '@/utils/mermaid.js'
 import { generateUuid32 } from '@/utils/uuid.js'
 
 // 存储 key（用于记住聊天框尺寸）
@@ -107,10 +107,15 @@ const streamTypewriter = useStreamTypewriter({
 // Mermaid 放大查看（拖拽 + 缩放）
 const mermaidViewerOpen = ref(false)
 const mermaidViewerSvg = ref('')
+const mermaidViewerSource = ref('')
 let svgPanZoomInstance = null
 let onViewerKeydown = null
 let mermaidViewerResizeObserver = null
 let onViewerWheel = null
+let viewerCopiedSourceTimer = null
+let viewerCopiedImageTimer = null
+const viewerCopiedSource = ref(false)
+const viewerCopiedImage = ref(false)
 
 async function ensureSvgPanZoom() {
   // 按需加载，避免不使用时增加首包体积
@@ -130,6 +135,17 @@ async function ensureSvgPanZoom() {
 function closeMermaidViewer() {
   mermaidViewerOpen.value = false
   mermaidViewerSvg.value = ''
+  mermaidViewerSource.value = ''
+  viewerCopiedSource.value = false
+  viewerCopiedImage.value = false
+  if (viewerCopiedSourceTimer) {
+    clearTimeout(viewerCopiedSourceTimer)
+    viewerCopiedSourceTimer = null
+  }
+  if (viewerCopiedImageTimer) {
+    clearTimeout(viewerCopiedImageTimer)
+    viewerCopiedImageTimer = null
+  }
   if (svgPanZoomInstance) {
     try {
       svgPanZoomInstance.destroy()
@@ -172,6 +188,20 @@ async function openMermaidViewer(svgHtml) {
   // 直接用组件自身的容器 ref 来定位即可。
   const svgEl = containerRef.value?.querySelector('.mermaid-viewer-canvas svg')
   if (!svgEl) return
+
+  // 关键：强制 SVG 填满画布，避免 Mermaid 内联 width/height/style 导致只显示一小块。
+  try {
+    svgEl.removeAttribute('style')
+    svgEl.setAttribute('width', '100%')
+    svgEl.setAttribute('height', '100%')
+    svgEl.style.width = '100%'
+    svgEl.style.height = '100%'
+    svgEl.style.maxWidth = 'none'
+    svgEl.style.maxHeight = 'none'
+    svgEl.style.display = 'block'
+  } catch (_) {
+    // ignore
+  }
 
   const svgPanZoom = await ensureSvgPanZoom()
 
@@ -272,6 +302,96 @@ function mermaidViewerReset() {
     svgPanZoomInstance.center()
   } catch (_) {
     // ignore
+  }
+}
+
+async function mermaidViewerCopySource() {
+  if (!mermaidViewerSource.value) return
+  await navigator.clipboard.writeText(mermaidViewerSource.value)
+  viewerCopiedSource.value = true
+  if (viewerCopiedSourceTimer) clearTimeout(viewerCopiedSourceTimer)
+  viewerCopiedSourceTimer = setTimeout(() => {
+    viewerCopiedSource.value = false
+    viewerCopiedSourceTimer = null
+  }, 1200)
+}
+
+function getSvgStringForExport() {
+  const svgEl = containerRef.value?.querySelector('.mermaid-viewer-canvas svg')
+  if (!svgEl) return null
+
+  // 深拷贝一份，避免污染页面中的 SVG（例如 svg-pan-zoom 注入的属性）
+  const clone = svgEl.cloneNode(true)
+  if (!(clone instanceof SVGElement)) return null
+
+  clone.removeAttribute('style')
+  // 尽量保留原始 viewBox（Mermaid 一般自带），但删除宽高限制交给导出逻辑决定
+  clone.removeAttribute('width')
+  clone.removeAttribute('height')
+  clone.style.width = ''
+  clone.style.height = ''
+  clone.style.maxWidth = ''
+  clone.style.maxHeight = ''
+
+  // 为了导出稳定性：补充必要的命名空间
+  if (!clone.getAttribute('xmlns')) {
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+  }
+
+  return new XMLSerializer().serializeToString(clone)
+}
+
+async function mermaidViewerCopyImage() {
+  const svgText = getSvgStringForExport()
+  if (!svgText) return
+
+  const svgBlob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' })
+  const url = URL.createObjectURL(svgBlob)
+
+  try {
+    const img = new Image()
+    const loaded = new Promise((resolve, reject) => {
+      img.onload = resolve
+      img.onerror = reject
+    })
+    img.src = url
+    await loaded
+
+    // 导出 PNG 尺寸：取预览画布尺寸（用户看到的区域），保证“复制的图片”符合当前 UI 尺寸。
+    const canvasEl = containerRef.value?.querySelector?.('.mermaid-viewer-canvas')
+    const rect = canvasEl?.getBoundingClientRect?.()
+    const w = Math.max(1, Math.floor(rect?.width || img.naturalWidth || img.width || 800))
+    const h = Math.max(1, Math.floor(rect?.height || img.naturalHeight || img.height || 600))
+
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    // 使用当前主题背景色，避免透明 PNG 在不同底色下可读性差
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg-app')?.trim() || '#ffffff'
+    ctx.fillStyle = bg
+    ctx.fillRect(0, 0, w, h)
+    ctx.drawImage(img, 0, 0, w, h)
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
+    if (!blob) return
+
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'image/png': blob
+      })
+    ])
+
+    viewerCopiedImage.value = true
+    if (viewerCopiedImageTimer) clearTimeout(viewerCopiedImageTimer)
+    viewerCopiedImageTimer = setTimeout(() => {
+      viewerCopiedImage.value = false
+      viewerCopiedImageTimer = null
+    }, 1200)
+  } finally {
+    URL.revokeObjectURL(url)
   }
 }
 
@@ -435,6 +555,9 @@ function handleMessagesClick(e) {
   // 只支持“内联 SVG”的图放大；如果是 iframe（sandbox 输出），这里会找不到 svg。
   const svgEl = mermaidBlock.querySelector?.('svg')
   if (!svgEl) return
+
+  const key = mermaidBlock.getAttribute?.('data-key') || ''
+  mermaidViewerSource.value = getMermaidSourceByKey(key) || ''
 
   openMermaidViewer(svgEl.outerHTML)
 }
@@ -649,14 +772,33 @@ function handleKeydown(e) {
             </button>
             <div class="mermaid-viewer-canvas" v-html="mermaidViewerSvg"></div>
             <div class="mermaid-viewer-toolbar" role="toolbar" aria-label="Mermaid 缩放工具">
-              <button class="mermaid-toolbtn" type="button" title="放大" @click="mermaidViewerZoomIn">
+              <button class="mermaid-toolbtn" type="button" data-tip="放大" @click="mermaidViewerZoomIn">
                 <ZoomIn :size="16" />
               </button>
-              <button class="mermaid-toolbtn" type="button" title="缩小" @click="mermaidViewerZoomOut">
+              <button class="mermaid-toolbtn" type="button" data-tip="缩小" @click="mermaidViewerZoomOut">
                 <ZoomOut :size="16" />
               </button>
-              <button class="mermaid-toolbtn" type="button" title="重置" @click="mermaidViewerReset">
+              <button class="mermaid-toolbtn" type="button" data-tip="重置" @click="mermaidViewerReset">
                 <RotateCcw :size="16" />
+              </button>
+              <div class="mermaid-tool-sep" aria-hidden="true"></div>
+              <button
+                class="mermaid-toolbtn"
+                type="button"
+                :data-tip="viewerCopiedSource ? '已复制 Mermaid 语句' : '复制 Mermaid 语句'"
+                @click="mermaidViewerCopySource"
+              >
+                <Check v-if="viewerCopiedSource" :size="16" />
+                <FileCode v-else :size="16" />
+              </button>
+              <button
+                class="mermaid-toolbtn"
+                type="button"
+                :data-tip="viewerCopiedImage ? '已复制图片' : '复制图片'"
+                @click="mermaidViewerCopyImage"
+              >
+                <Check v-if="viewerCopiedImage" :size="16" />
+                <ImageDown v-else :size="16" />
               </button>
             </div>
           </div>
