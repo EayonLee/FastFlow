@@ -308,11 +308,15 @@
 }
 
 #fastflow-copilot-container .msg-markdown blockquote {
-    margin: 8px 0 0;
+    margin: 12px 0 0;
     padding: 8px 10px;
     border-left: 3px solid var(--border-subtle);
     background: rgba(255, 255, 255, 0.03);
     border-radius: 6px;
+}
+
+#fastflow-copilot-container .msg-markdown > blockquote:first-child {
+    margin-top: 0;
 }
 
 #fastflow-copilot-container .msg-markdown blockquote p {
