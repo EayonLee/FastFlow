@@ -27,7 +27,6 @@ CACHE_KEY_WORKFLOW_GRAPH = "workflow_graph"
 CACHE_KEY_WORKFLOW_META = "workflow_meta"
 
 # 进程内会话上下文缓存：session_id -> {workflow_graph: {...}, workflow_meta: {...}}
-# 兼容旧结构：历史缓存可能直接是 workflow_graph dict。
 _SESSION_CONTEXT_CACHE: Dict[str, Dict[str, Any]] = {}
 _SESSION_CONTEXT_CACHE_LOCK = RLock()
 
@@ -85,26 +84,20 @@ def _normalize_workflow_meta(workflow_meta: Dict[str, Any] | None) -> Dict[str, 
 
 def _normalize_session_context_entry(entry: Dict[str, Any] | None) -> Dict[str, Any]:
     """
-    归一化 session 缓存结构：
-    - 新结构：{workflow_graph: {...}, workflow_meta: {...}}
-    - 旧结构：直接 workflow_graph dict
+    归一化 session 缓存结构（仅支持新结构）：
+    {workflow_graph: {...}, workflow_meta: {...}}
     """
     if not isinstance(entry, dict):
         return {}
 
-    has_new_shape = CACHE_KEY_WORKFLOW_GRAPH in entry or CACHE_KEY_WORKFLOW_META in entry
-    if has_new_shape:
-        normalized: Dict[str, Any] = {}
-        workflow_graph = entry.get(CACHE_KEY_WORKFLOW_GRAPH)
-        workflow_meta = entry.get(CACHE_KEY_WORKFLOW_META)
-        if isinstance(workflow_graph, dict):
-            normalized[CACHE_KEY_WORKFLOW_GRAPH] = workflow_graph
-        if isinstance(workflow_meta, dict):
-            normalized[CACHE_KEY_WORKFLOW_META] = _normalize_workflow_meta(workflow_meta)
-        return normalized
-
-    # 兼容旧结构：entry 本身就是 workflow_graph dict。
-    return {CACHE_KEY_WORKFLOW_GRAPH: entry}
+    normalized: Dict[str, Any] = {}
+    workflow_graph = entry.get(CACHE_KEY_WORKFLOW_GRAPH)
+    workflow_meta = entry.get(CACHE_KEY_WORKFLOW_META)
+    if isinstance(workflow_graph, dict):
+        normalized[CACHE_KEY_WORKFLOW_GRAPH] = workflow_graph
+    if isinstance(workflow_meta, dict):
+        normalized[CACHE_KEY_WORKFLOW_META] = _normalize_workflow_meta(workflow_meta)
+    return normalized
 
 
 def _get_cached_session_context(session_id: str) -> Dict[str, Any] | None:

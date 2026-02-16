@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     LOG_ROTATION: str = "1"
     LOG_RETENTION: str = "7"
     LOG_MAX_FILE_SIZE: str = "100"
+    
+    # LiteLLM 日志配置（默认关闭调试输出，防止打印请求体/提示词）
+    LITELLM_VERBOSE: bool = False
+    LITELLM_SUPPRESS_DEBUG_INFO: bool = True
+    LITELLM_TURN_OFF_MESSAGE_LOGGING: bool = True
+    LITELLM_DISABLE_STREAMING_LOGGING: bool = True
+    LITELLM_LOG_LEVEL: str = "WARNING"
 
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),

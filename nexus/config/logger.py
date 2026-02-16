@@ -77,6 +77,22 @@ def parse_size(size_str: str) -> int:
     
     return int(number * multipliers.get(unit, 1024 * 1024))
 
+
+def configure_litellm_logging() -> None:
+    """
+    统一配置 LiteLLM 的全局日志行为，避免在业务代码中分散设置。
+    """
+    try:
+        import litellm
+    except Exception:
+        return
+
+    litellm.set_verbose = settings.LITELLM_VERBOSE
+    litellm.suppress_debug_info = settings.LITELLM_SUPPRESS_DEBUG_INFO
+    litellm.turn_off_message_logging = settings.LITELLM_TURN_OFF_MESSAGE_LOGGING
+    litellm.disable_streaming_logging = settings.LITELLM_DISABLE_STREAMING_LOGGING
+    litellm.log_level = settings.LITELLM_LOG_LEVEL.upper()
+
 def setup_logging():
     """设置日志配置"""
     
@@ -180,14 +196,25 @@ def setup_logging():
     
     # 设置标准库日志器使用loguru
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+
+    # 在日志系统初始化时统一下发 LiteLLM 日志配置
+    configure_litellm_logging()
     
     # 设置第三方库日志级别
     for logger_name in ["uvicorn", "uvicorn.access", "transformers"]:
         logging.getLogger(logger_name).setLevel(getattr(logging, settings.LOG_LEVEL.upper()))
 
-    # 降低 httpx 请求日志噪声
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpx._client").setLevel(logging.WARNING)
+    # 降低第三方库请求日志噪声
+    for logger_name in [
+        "httpx",
+        "httpx._client",
+        "openai",
+        "openai._base_client",
+        "litellm",
+        "LiteLLM",
+        "LiteLLM Router",
+    ]:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
 
     # 应用日志器使用配置文件级别
     app_logger = logging.getLogger("app")

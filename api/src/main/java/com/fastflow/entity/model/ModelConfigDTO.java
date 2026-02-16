@@ -15,24 +15,34 @@ public class ModelConfigDTO {
     private String modelName;
 
     /**
-     * 模型ID
+     * LiteLLM 模型标识（例如：moonshot/kimi-k2.5）
      */
-    private String modelId;
+    private String litellmModel;
 
     /**
-     * API 密钥
+     * LiteLLM provider（可选）
+     */
+    private String provider;
+
+    /**
+     * API 密钥（必填）
      */
     private String apiKey;
 
     /**
-     * API 基础地址
+     * API 网关地址（可选）
      */
-    private String apiBase;
+    private String baseUrl;
 
     /**
-     * API 模式（如：openai、claude、google_gemini）
+     * LiteLLM 透传参数 JSON（可选）
      */
-    private String apiMode;
+    private String modelParamsJson;
+
+    /**
+     * 启用开关：true=可对外使用，false=禁用
+     */
+    private Boolean enabled;
 
     /**
      * 所属用户组ID

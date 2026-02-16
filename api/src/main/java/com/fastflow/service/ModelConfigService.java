@@ -41,6 +41,9 @@ public class ModelConfigService extends ServiceImpl<ModelConfigMapper, ModelConf
         if (modelConfig.getSortOrder() == null) {
             modelConfig.setSortOrder(getNextSortOrder());
         }
+        if (modelConfig.getEnabled() == null) {
+            modelConfig.setEnabled(Boolean.TRUE);
+        }
         this.save(modelConfig);
 
         return modelConfig.getId();
@@ -71,9 +74,13 @@ public class ModelConfigService extends ServiceImpl<ModelConfigMapper, ModelConf
 
         // 3. 更新属性
         Integer currentSortOrder = existingConfig.getSortOrder();
+        Boolean currentEnabled = existingConfig.getEnabled();
         BeanUtil.copyProperties(dto, existingConfig);
         existingConfig.setId(id);
         existingConfig.setSortOrder(currentSortOrder);
+        if (existingConfig.getEnabled() == null) {
+            existingConfig.setEnabled(currentEnabled == null ? Boolean.TRUE : currentEnabled);
+        }
 
         this.updateById(existingConfig);
     }
@@ -113,6 +120,7 @@ public class ModelConfigService extends ServiceImpl<ModelConfigMapper, ModelConf
      */
     public List<ModelConfigVO> getModelConfigList() {
         List<ModelConfig> list = this.list(new LambdaQueryWrapper<ModelConfig>()
+                .eq(ModelConfig::getEnabled, true)
                 .orderByAsc(ModelConfig::getSortOrder));
 
         return list.stream()

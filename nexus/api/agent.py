@@ -63,7 +63,12 @@ async def chat_completions(
         raise ParmasValidationError("session_id is required")
 
     logger.info(
-        f"Received {context.mode} agent request with model_config_id: {context.model_config_id}, user_prompt: {context.user_prompt}")
+        "步骤[接口接收]：收到 %s 请求，model_config_id=%s，prompt_len=%d，session_id=%s",
+        context.mode,
+        context.model_config_id,
+        len(context.user_prompt),
+        context.session_id,
+    )
 
     # Chat Agent
     if context.mode == "chat":
