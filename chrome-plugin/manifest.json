@@ -27,7 +27,12 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["assets/*", "src/inject/index.js", "src/utils/workflowGraph.js"],
+      "resources": [
+        "assets/*",
+        "src/inject/index.js",
+        "src/utils/workflowGraph.js",
+        "src/utils/workflowMeta.js"
+      ],
       "matches": ["<all_urls>"]
     }
   ],

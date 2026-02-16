@@ -19,7 +19,7 @@ from typing import List, Tuple
 from nexus.core.schemas import ChatRequestContext
 
 from .base_tools import WorkflowGraphTools, build_workflow_graph_tools as build_workflow_graph_base_tools
-from .mcp_tools import WorkflowGraphMcpTools, build_workflow_graph_mcp_tools
+from .mcp_node_tools import WorkflowGraphMcpTools, build_workflow_graph_mcp_tools
 
 
 @dataclass

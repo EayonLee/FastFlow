@@ -5,6 +5,8 @@ const RENDER_MESSAGE_TYPE = 'FASTFLOW_RENDER'
 const RENDER_RESULT_TYPE = 'FASTFLOW_RENDER_RESULT'
 const EXPORT_MESSAGE_TYPE = 'FASTFLOW_EXPORT'
 const EXPORT_RESULT_TYPE = 'FASTFLOW_EXPORT_RESULT'
+const EXPORT_META_MESSAGE_TYPE = 'FASTFLOW_EXPORT_META'
+const EXPORT_META_RESULT_TYPE = 'FASTFLOW_EXPORT_META_RESULT'
 const EXPORT_TIMEOUT_MS = 3000
 
 function injectScript() {
@@ -70,8 +72,35 @@ function exportWorkflowGraph() {
   })
 }
 
+function exportWorkflowMeta() {
+  return new Promise((resolve, reject) => {
+    window.postMessage({
+      type: EXPORT_META_MESSAGE_TYPE
+    }, MESSAGE_TARGET)
+
+    const timeout = setTimeout(() => {
+      window.removeEventListener('message', resultListener)
+      reject(new Error('读取当前工作流名称和描述超时'))
+    }, EXPORT_TIMEOUT_MS)
+
+    const resultListener = (event) => {
+      if (!event.data || event.data.type !== EXPORT_META_RESULT_TYPE) return
+      clearTimeout(timeout)
+      window.removeEventListener('message', resultListener)
+      if (event.data.success) {
+        resolve(event.data.payload || null)
+      } else {
+        reject(new Error(event.data.message || '读取当前工作流名称和描述失败'))
+      }
+    }
+
+    window.addEventListener('message', resultListener)
+  })
+}
+
 export const Bridge = {
   injectScript,
   sendRenderRequest,
-  exportWorkflowGraph
+  exportWorkflowGraph,
+  exportWorkflowMeta
 }

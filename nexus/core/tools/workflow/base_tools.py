@@ -3,12 +3,13 @@
 
 该模块只提供与节点类型无关的通用能力：
 - 获取完整工作流图（展示用裁剪版本）
+- 获取工作流元信息（workflow_name / workflow_description）
 - 按 nodeId 获取单个节点信息
 - 按关键词检索节点（name/type/intro/nodeId）
 
 注意：
 - 这里不要写业务语义抽取（例如 MCP toolList 抽取），业务语义应放到独立模块
-  例如 `mcp_tools.py`，避免 base 工具膨胀。
+  例如 `mcp_node_tools.py`，避免 base 工具膨胀。
 """
 
 from __future__ import annotations
@@ -30,8 +31,9 @@ class WorkflowGraphTools:
     """
     工作流图工具：
     1) 查询完整工作流图
-    2) 查询单个节点详情
-    3) 按关键词检索节点
+    2) 查询工作流元信息
+    3) 查询单个节点详情
+    4) 按关键词检索节点
 
     调用链路：
     - 外层通过 build_workflow_graph_tools 注册 LangChain tool
@@ -61,6 +63,17 @@ class WorkflowGraphTools:
             self.context.session_id,
         )
         _log_tool_result_debug("get_full_workflow_graph", self.context.session_id, result_json)
+        return result_json
+
+    def get_workflow_meta(self) -> str:
+        """
+        工作流图工具：返回工作流元信息 JSON。
+        """
+        logger.info("Agent tool [get_workflow_meta] - start. session_id=%s", self.context.session_id)
+        workflow_meta = self._cache.get_workflow_meta_dict()
+        result_json = json.dumps(workflow_meta, ensure_ascii=False)
+        logger.info("Agent tool [get_workflow_meta] - done. session_id=%s", self.context.session_id)
+        _log_tool_result_debug("get_workflow_meta", self.context.session_id, result_json)
         return result_json
 
     def get_workflow_node_info(self, node_id: str) -> str:
@@ -186,6 +199,12 @@ def build_workflow_graph_tools(context: ChatRequestContext) -> Tuple[List, Workf
         return tool_impl.get_full_workflow_graph()
 
     @tool
+    def get_workflow_meta():
+        # 保持返回结构稳定：workflow_name/workflow_description 均存在（可为空字符串）。
+        """工作流图工具：获取当前工作流元信息，包含工作流名称与工作流描述。"""
+        return tool_impl.get_workflow_meta()
+
+    @tool
     def get_workflow_node_info(node_id: str):
         # 节点详情会以归一化结构返回（id/type/name/intro/inputs/outputs），便于前端统一渲染。
         """工作流图工具：根据节点 ID 获取节点详情。"""
@@ -200,6 +219,7 @@ def build_workflow_graph_tools(context: ChatRequestContext) -> Tuple[List, Workf
     # 返回固定顺序，便于调试与观测。
     return [
         get_full_workflow_graph,
+        get_workflow_meta,
         get_workflow_node_info,
         find_workflow_graph_nodes,
     ], tool_impl

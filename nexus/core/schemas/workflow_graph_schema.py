@@ -10,7 +10,7 @@ class NodeInstance(BaseModel):
     """
     前端导出中的节点对象。
     """
-
+    # Pydantic v2 模型级配置，不是业务字段，extra="allow" 表示允许并保留未在类中显式声明的扩展字段。model_config 由 Pydantic 约定，不能随意改名
     model_config = ConfigDict(extra="allow")
 
     node_id: str = Field(..., description="唯一的节点 ID", alias="nodeId")
@@ -21,7 +21,7 @@ class EdgeInstance(BaseModel):
     """
     前端导出中的边对象。
     """
-
+    # Pydantic v2 模型级配置，不是业务字段，extra="allow" 表示允许并保留未在类中显式声明的扩展字段。model_config 由 Pydantic 约定，不能随意改名
     model_config = ConfigDict(extra="allow")
 
     source: str = Field(..., description="源节点 ID")
@@ -34,7 +34,7 @@ class WorkflowGraph(BaseModel):
     """
     工作流图（与前端导出结构对齐）：nodes / edges / chatConfig。
     """
-
+    # Pydantic v2 模型级配置，不是业务字段，extra="allow" 表示允许并保留未在类中显式声明的扩展字段。model_config 由 Pydantic 约定，不能随意改名
     model_config = ConfigDict(extra="allow")
 
     nodes: List[NodeInstance] = Field(default_factory=list)

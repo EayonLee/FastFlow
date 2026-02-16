@@ -361,10 +361,17 @@ async function handleGenerate() {
   scrollToBottom()
 
   const isChatAgent = selectedAgent.value === 'chat'
-  // 5) 所有模式都导出当前工作流配置原文并传给后端
+  // 5) 所有模式都导出当前工作流配置原文，并从 DOM 读取当前工作流名称/描述
   let workflowGraph = null
+  let workflowMeta = null
   try {
     workflowGraph = await Bridge.exportWorkflowGraph()
+    try {
+      workflowMeta = await Bridge.exportWorkflowMeta()
+    } catch (metaErr) {
+      console.warn('[FastFlow] Export workflow meta failed:', metaErr)
+      workflowMeta = null
+    }
   } catch (e) {
     setMessageError(loadingMsgId, `Export current workflow graph failed：${e.message}`)
     // 终止本次发送
@@ -380,7 +387,8 @@ async function handleGenerate() {
       mode: selectedAgent.value,
       modelConfigId: selectedModel.value,
       sessionId: sessionId.value,
-      workflowGraph
+      workflowGraph,
+      workflowMeta
     },
     (chunk) => {
       // Chat/Builder 的流式文本统一追加到消息里

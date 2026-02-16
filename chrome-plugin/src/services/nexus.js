@@ -10,6 +10,7 @@ import { Logger } from '@/utils/logger.js'
  * @param {string} params.sessionId - 会话 ID
  * @param {number} params.modelConfigId - 模型配置 ID（后端要求为数字）
  * @param {string|null} params.workflowGraph - 当前画布导出的原始 JSON 字符串（所有模式都传递）
+ * @param {{workflow_name?: string, workflow_description?: string}|null} [params.workflowMeta] - 工作流元信息（可选）
  * @param {Function|null} onChunk - 流式内容回调（目前后端未返回 content，可为空）
  * @param {Function} onComplete - 成功回调（返回最终 graph）
  * @param {Function} onError - 错误回调（返回 Error）
@@ -25,7 +26,8 @@ async function generateWorkflow(params, onChunk, onComplete, onError) {
       user_prompt: params.prompt,
       session_id: params.sessionId,
       model_config_id: params.modelConfigId,
-      workflow_graph: params.workflowGraph
+      workflow_graph: params.workflowGraph,
+      workflow_meta: params.workflowMeta ?? null
     }
 
     // 发起请求（Nexus SSE 流式接口）
