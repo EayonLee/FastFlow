@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "build": "vite build --mode development",
+    "build:prod": "vite build --mode production",
     "watch": "vite build --watch --mode development"
   },
   "dependencies": {
