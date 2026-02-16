@@ -8,9 +8,8 @@ fastapi
 uvicorn
 
 # 模型厂商接入支持
-langchain-openai
-langchain-anthropic
-langchain-google-genai
+litellm>=1.63.0
+langchain-litellm>=0.2.0
 
 # 其他依赖
 pydantic

@@ -1,9 +1,11 @@
 import httpx
-from typing import Optional
+import json
+from json import JSONDecodeError
+from typing import Any, Dict, Optional
 from nexus.config.config import get_config
 from nexus.config.logger import get_logger
 from nexus.common.exceptions import BusinessError
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # 获取全局配置
 settings = get_config()
@@ -13,10 +15,40 @@ MODEL_CONFIG_PATH = "/fastflow/api/v1/model_config/{}"
 
 
 class ModelConfig(BaseModel):
+    model_name: Optional[str] = None
+    litellm_model: str
+    provider: Optional[str] = None
     api_key: str
     base_url: Optional[str] = None
-    model_id: Optional[str] = None
-    api_mode: Optional[str] = None
+    model_params: Dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+def _parse_model_params(raw_value: Any) -> Dict[str, Any]:
+    if isinstance(raw_value, dict):
+        return raw_value
+    if isinstance(raw_value, str):
+        text = raw_value.strip()
+        if not text:
+            return {}
+        try:
+            parsed = json.loads(text)
+            return parsed if isinstance(parsed, dict) else {}
+        except JSONDecodeError:
+            logger.warning("Invalid model_params_json, fallback to empty object.")
+            return {}
+    return {}
+
+
+def _parse_enabled(raw_value: Any) -> bool:
+    if isinstance(raw_value, bool):
+        return raw_value
+    if isinstance(raw_value, (int, float)):
+        return raw_value != 0
+    if isinstance(raw_value, str):
+        normalized = raw_value.strip().lower()
+        return normalized in {"1", "true", "yes", "on"}
+    return True
 
 
 def _build_headers(auth_token: Optional[str]) -> dict[str, str]:
@@ -63,12 +95,23 @@ def fetch_model_config(model_config_id: int, auth_token: Optional[str] = None) -
         if not api_key:
             return None
 
+        litellm_model = str(result.get("litellmModel") or "").strip()
+        if not litellm_model:
+            raise BusinessError("模型配置缺少 litellmModel")
+
+        enabled = _parse_enabled(result.get("enabled", True))
+        if not enabled:
+            raise BusinessError("当前模型配置已禁用，请切换其他模型")
+
         logger.debug("Successfully fetched Model Config for model_config_id: %s", model_config_id)
         return ModelConfig(
+            model_name=result.get("modelName"),
+            litellm_model=litellm_model,
+            provider=result.get("provider"),
             api_key=api_key,
-            base_url=result.get("apiBase"),
-            model_id=result.get("modelId"),
-            api_mode=result.get("apiMode"),
+            base_url=result.get("baseUrl"),
+            model_params=_parse_model_params(result.get("modelParamsJson")),
+            enabled=enabled,
         )
     except BusinessError:
         raise

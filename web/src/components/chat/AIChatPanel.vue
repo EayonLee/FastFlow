@@ -94,8 +94,8 @@ currentSessionId.value = generateUUID()
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const copiedId = ref<number | null>(null)
 
-const selectedModel = ref('')
-const models = ref<{ label: string, value: string, id?: number }[]>([])
+const selectedModel = ref<number>(-1)
+const models = ref<{ label: string, value: number }[]>([])
 
 // 默认选择的智能体类型
 const selectedAgentType = ref('builder')
@@ -130,26 +130,25 @@ const fetchModels = async () => {
     if (configs && configs.length > 0) {
       models.value = configs.map(config => ({
         label: config.modelName,
-        value: config.modelName,
-        id: config.id
+        value: config.id
       }))
 
       // 默认选中第一个
-      if (!selectedModel.value && models.value.length > 0) {
-        selectedModel.value = models.value[0]?.value || ''
+      if (selectedModel.value < 0 && models.value.length > 0) {
+        selectedModel.value = models.value[0]?.value ?? -1
       }
     } else {
        models.value = [
-        { label: '暂无模型配置', value: '' }
+        { label: '暂无模型配置', value: -1 }
       ]
-      selectedModel.value = ''
+      selectedModel.value = -1
     }
   } catch (error) {
     console.error('Failed to fetch models:', error)
     models.value = [
-        { label: '暂无模型配置', value: '' }
+        { label: '暂无模型配置', value: -1 }
       ]
-      selectedModel.value = ''
+      selectedModel.value = -1
   }
 }
 
@@ -307,15 +306,18 @@ const sendMessage = async () => {
     // 3. 查找选中的模型配置
     const selectedConfig = models.value.find(m => m.value === selectedModel.value)
     // 如果没有有效的模型配置（例如 "暂无模型配置"），则抛出错误
-    if (!selectedModel.value) {
+    if (selectedModel.value < 0) {
         throw new Error('当前没有可用的模型配置，请先在设置中添加模型。')
+    }
+    if (!selectedConfig) {
+        throw new Error('选中的模型配置不存在，请重新选择模型。')
     }
 
     // 4. 准备请求体
     const context = {
       user_prompt: content,
       current_graph: currentGraph,
-      model_config_id: selectedConfig ? selectedConfig.id : null,
+      model_config_id: selectedConfig.value,
       session_id: currentSessionId.value,
       agent_type: selectedAgentType.value
     }

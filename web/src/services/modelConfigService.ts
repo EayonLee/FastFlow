@@ -3,11 +3,14 @@ import apiClient, { type ApiResponse } from './http'
 export interface ModelConfigResponse {
   id: number
   modelName: string
-  modelId: string
+  litellmModel: string
+  provider?: string | null
   apiKey: string
-  apiBase: string
-  apiMode: string
+  baseUrl?: string | null
+  modelParamsJson?: string | null
+  enabled: boolean
   userGroupId: string
+  sortOrder: number
   createdAt: string
   updatedAt: string
 }

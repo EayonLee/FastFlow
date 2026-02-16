@@ -115,9 +115,8 @@ class WorkflowGraphMcpTools:
 
     def _extract_tool_list_from_toolset_node(self, toolset_node: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], str]:
         """
-        兼容两种常见形态：
-        1) inputs[key=="toolSetData"].value.toolList
-        2) inputs[].value.toolSetData.toolList
+        从标准结构抽取 toolList：
+        inputs[key=="toolSetData"].value.toolList
         返回 (tool_list, extraction_path_used)。
         """
         inputs = toolset_node.get("inputs", [])
@@ -136,20 +135,6 @@ class WorkflowGraphMcpTools:
             tool_list = value.get("toolList")
             if isinstance(tool_list, list):
                 return [t for t in tool_list if isinstance(t, dict)], "inputs[key=toolSetData].value.toolList"
-
-        # 形态 2（兼容）：inputs[].value.toolSetData.toolList
-        for item in inputs:
-            if not isinstance(item, dict):
-                continue
-            value = item.get("value")
-            if not isinstance(value, dict):
-                continue
-            toolset_data = value.get("toolSetData")
-            if not isinstance(toolset_data, dict):
-                continue
-            tool_list = toolset_data.get("toolList")
-            if isinstance(tool_list, list):
-                return [t for t in tool_list if isinstance(t, dict)], "inputs[].value.toolSetData.toolList"
 
         return [], "toolList(not_found)"
 

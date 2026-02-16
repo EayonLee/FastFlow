@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from json import JSONDecodeError
 from typing import Any
@@ -97,7 +99,8 @@ def ensure_tool_call_ids(message: BaseMessage) -> BaseMessage:
         return message
     raw_tool_calls = message.tool_calls or (message.additional_kwargs or {}).get("tool_calls")
     if not raw_tool_calls:
-        logger.warning("Tool call missing in AIMessage. message_id=%s", message.id)
+        # 普通文本回答天然不包含 tool_call，这里仅做调试记录，避免污染告警。
+        logger.debug("工具调用适配.无工具调用 message_id=%s", message.id)
         return message
 
     normalized_calls = []

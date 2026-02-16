@@ -1,11 +1,6 @@
 /*
- * 文件名: model_configs.sql
- * 作用: 定义模型配置表的数据库结构
- * 实现功能: 创建 model_configs 表，用于存储大模型的连接配置信息，包括 API Key、Base URL 等。
- * 注意事项:
- *   1. id 为自增主键。
- *   2. mode_name 具有唯一性约束，不可重复。
- *   3. 包含了创建时间和更新时间的自动维护字段。
+ * 表名: model_configs
+ * 作用: 存储 LiteLLM 模型接入配置（模型标识、provider、网关地址、透传参数、启用开关）
  */
 
 SET NAMES utf8mb4;
@@ -16,18 +11,28 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- ----------------------------
 DROP TABLE IF EXISTS `model_configs`;
 CREATE TABLE `model_configs` (
-  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  `model_name` varchar(100) COLLATE utf8mb4_general_ci NOT NULL COMMENT '模型名称',
-  `model_id` varchar(100) COLLATE utf8mb4_general_ci NOT NULL COMMENT '模型ID',
-  `api_key` varchar(255) COLLATE utf8mb4_general_ci NOT NULL COMMENT 'API 密钥',
-  `api_base` varchar(255) COLLATE utf8mb4_general_ci NOT NULL COMMENT 'API 地址',
-  `api_mode` varchar(50) COLLATE utf8mb4_general_ci NOT NULL COMMENT 'API 模式（如：openai、claude、google_gemini）',
-  `user_group_id` varchar(50) COLLATE utf8mb4_general_ci NOT NULL COMMENT '所属用户组ID',
-  `sort_order` int NOT NULL DEFAULT 1 COMMENT '排序值（越小越靠前）',
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `model_name` varchar(100) NOT NULL COMMENT '模型展示名称',
+  `litellm_model` varchar(150) NOT NULL COMMENT 'LiteLLM 模型标识（示例：moonshot/kimi-k2.5）',
+  `provider` varchar(50) DEFAULT NULL COMMENT 'LiteLLM provider（可选，示例：openai/dashscope/moonshot）',
+  `api_key` varchar(255) NOT NULL COMMENT 'API 密钥',
+  `base_url` varchar(255) DEFAULT NULL COMMENT '模型网关地址（可选）',
+  `model_params_json` text COMMENT 'LiteLLM 透传参数（JSON 字符串）',
+  `enabled` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否启用：1启用 0禁用',
+  `sort_order` int(11) NOT NULL DEFAULT '1' COMMENT '排序值（越小越靠前）',
+  `user_group_id` varchar(50) NOT NULL COMMENT '所属用户组ID',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_model_name` (`model_name`)
-) ENGINE=InnoDB AUTO_INCREMENT=10000 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='模型配置表';
+) ENGINE=InnoDB AUTO_INCREMENT=10002 DEFAULT CHARSET=utf8mb4 COMMENT='模型配置表';
+
+-- ----------------------------
+-- Records of model_configs
+-- ----------------------------
+BEGIN;
+INSERT INTO `model_configs` (`id`, `model_name`, `litellm_model`, `provider`, `api_key`, `base_url`, `model_params_json`, `enabled`, `sort_order`, `user_group_id`, `created_at`, `updated_at`) VALUES (10000, 'Kimi-K2', 'moonshot/kimi-k2-turbo-preview', 'moonshot', 'xxx', 'https://api.moonshot.cn/v1', NULL, 1, 1, '0', '2026-01-23 17:44:18', '2026-02-12 11:18:11');
+INSERT INTO `model_configs` (`id`, `model_name`, `litellm_model`, `provider`, `api_key`, `base_url`, `model_params_json`, `enabled`, `sort_order`, `user_group_id`, `created_at`, `updated_at`) VALUES (10001, 'Qwen3.5-Plus（推荐）', 'dashscope/qwen3.5-plus', 'dashscope', 'xxx', 'https://dashscope.aliyuncs.com/compatible-mode/v1', NULL, 1, 2, '0', '2026-02-16 22:11:47', '2026-02-16 22:13:56');
+COMMIT;
 
 SET FOREIGN_KEY_CHECKS = 1;
