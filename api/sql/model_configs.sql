@@ -13,7 +13,7 @@ DROP TABLE IF EXISTS `model_configs`;
 CREATE TABLE `model_configs` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `model_name` varchar(100) NOT NULL COMMENT '模型展示名称',
-  `litellm_model` varchar(150) NOT NULL COMMENT 'LiteLLM 模型标识（示例：moonshot/kimi-k2.5）',
+  `model_id` varchar(150) NOT NULL COMMENT '模型标识（示例：moonshot/kimi-k2.5）',
   `provider` varchar(50) DEFAULT NULL COMMENT 'LiteLLM provider（可选，示例：openai/dashscope/moonshot）',
   `api_key` varchar(255) NOT NULL COMMENT 'API 密钥',
   `base_url` varchar(255) DEFAULT NULL COMMENT '模型网关地址（可选）',
@@ -31,8 +31,8 @@ CREATE TABLE `model_configs` (
 -- Records of model_configs
 -- ----------------------------
 BEGIN;
-INSERT INTO `model_configs` (`id`, `model_name`, `litellm_model`, `provider`, `api_key`, `base_url`, `model_params_json`, `enabled`, `sort_order`, `user_group_id`, `created_at`, `updated_at`) VALUES (10000, 'Kimi-K2', 'moonshot/kimi-k2-turbo-preview', 'moonshot', 'xxx', 'https://api.moonshot.cn/v1', NULL, 1, 1, '0', '2026-01-23 17:44:18', '2026-02-12 11:18:11');
-INSERT INTO `model_configs` (`id`, `model_name`, `litellm_model`, `provider`, `api_key`, `base_url`, `model_params_json`, `enabled`, `sort_order`, `user_group_id`, `created_at`, `updated_at`) VALUES (10001, 'Qwen3.5-Plus（推荐）', 'dashscope/qwen3.5-plus', 'dashscope', 'xxx', 'https://dashscope.aliyuncs.com/compatible-mode/v1', NULL, 1, 2, '0', '2026-02-16 22:11:47', '2026-02-16 22:13:56');
+INSERT INTO `model_configs` (`id`, `model_name`, `model_id`, `provider`, `api_key`, `base_url`, `model_params_json`, `enabled`, `sort_order`, `user_group_id`, `created_at`, `updated_at`) VALUES (10000, 'Kimi-K2', 'moonshot/kimi-k2-turbo-preview', 'moonshot', 'xxx', 'https://api.moonshot.cn/v1', NULL, 1, 1, '0', '2026-01-23 17:44:18', '2026-02-12 11:18:11');
+INSERT INTO `model_configs` (`id`, `model_name`, `model_id`, `provider`, `api_key`, `base_url`, `model_params_json`, `enabled`, `sort_order`, `user_group_id`, `created_at`, `updated_at`) VALUES (10001, 'Qwen3.5-Plus（推荐）', 'dashscope/qwen3.5-plus', 'dashscope', 'xxx', 'https://dashscope.aliyuncs.com/compatible-mode/v1', '{"enable_thinking": true}', 1, 2, '0', '2026-02-16 22:11:47', '2026-02-16 22:13:56');
 COMMIT;
 
 SET FOREIGN_KEY_CHECKS = 1;

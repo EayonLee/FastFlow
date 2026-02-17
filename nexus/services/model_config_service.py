@@ -16,7 +16,7 @@ MODEL_CONFIG_PATH = "/fastflow/api/v1/model_config/{}"
 
 class ModelConfig(BaseModel):
     model_name: Optional[str] = None
-    litellm_model: str
+    model_id: str
     provider: Optional[str] = None
     api_key: str
     base_url: Optional[str] = None
@@ -95,18 +95,17 @@ def fetch_model_config(model_config_id: int, auth_token: Optional[str] = None) -
         if not api_key:
             return None
 
-        litellm_model = str(result.get("litellmModel") or "").strip()
-        if not litellm_model:
-            raise BusinessError("模型配置缺少 litellmModel")
+        model_id = str(result.get("modelId") or "").strip()
+        if not model_id:
+            raise BusinessError("模型配置缺少 modelId")
 
         enabled = _parse_enabled(result.get("enabled", True))
         if not enabled:
             raise BusinessError("当前模型配置已禁用，请切换其他模型")
 
-        logger.debug("Successfully fetched Model Config for model_config_id: %s", model_config_id)
         return ModelConfig(
             model_name=result.get("modelName"),
-            litellm_model=litellm_model,
+            model_id=model_id,
             provider=result.get("provider"),
             api_key=api_key,
             base_url=result.get("baseUrl"),

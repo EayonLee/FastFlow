@@ -26,7 +26,7 @@ from langchain_core.tools import tool
 from nexus.config.logger import get_logger
 from nexus.core.schemas import ChatRequestContext
 
-from .cache import WorkflowGraphCache, _log_tool_result_debug
+from .cache import WorkflowGraphCache
 
 logger = get_logger(__name__)
 
@@ -161,12 +161,13 @@ class WorkflowGraphMcpTools:
         要求：
         - items 必须是 toolList 原文投影（name/description/inputSchema），禁止翻译/改写/补全。
         """
-        logger.info("Agent tool [get_toolset_tools] - start. node=%s session_id=%s", node_id_or_name, self._context.session_id)
         resolved, error = self._resolve_node(node_id_or_name)
         if error:
             result_json = json.dumps(error, ensure_ascii=False)
-            logger.info("Agent tool [get_toolset_tools] - done. ok=false session_id=%s", self._context.session_id)
-            _log_tool_result_debug("get_toolset_tools", self._context.session_id, result_json)
+            logger.info(
+                "[执行工具失败] tool=get_toolset_tools result=%s",
+                result_json,
+            )
             return result_json
 
         if resolved.flow_node_type != "toolSet":
@@ -175,8 +176,10 @@ class WorkflowGraphMcpTools:
                 "node": {"nodeId": resolved.node_id, "flowNodeType": resolved.flow_node_type, "name": resolved.name},
             }
             result_json = json.dumps(error, ensure_ascii=False)
-            logger.info("Agent tool [get_toolset_tools] - done. ok=false session_id=%s", self._context.session_id)
-            _log_tool_result_debug("get_toolset_tools", self._context.session_id, result_json)
+            logger.info(
+                "[执行工具失败] tool=get_toolset_tools result=%s",
+                result_json,
+            )
             return result_json
 
         tool_list, path_used = self._extract_tool_list_from_toolset_node(resolved.raw)
@@ -197,11 +200,10 @@ class WorkflowGraphMcpTools:
         }
         result_json = json.dumps(result, ensure_ascii=False)
         logger.info(
-            "Agent tool [get_toolset_tools] - done. ok=true count=%d session_id=%s",
+            "[执行工具成功] tool=get_toolset_tools count=%d result=%s",
             len(tool_list),
-            self._context.session_id,
+            result_json,
         )
-        _log_tool_result_debug("get_toolset_tools", self._context.session_id, result_json)
         return result_json
 
     def get_tools_node_mcp_tools(self, node_id_or_name: str, handle: Optional[str] = None) -> str:
@@ -211,17 +213,13 @@ class WorkflowGraphMcpTools:
         handle 说明：
         - 如果传入 handle，则只统计 sourceHandle 匹配的连线。
         """
-        logger.info(
-            "Agent tool [get_tools_node_mcp_tools] - start. node=%s handle=%s session_id=%s",
-            node_id_or_name,
-            handle,
-            self._context.session_id,
-        )
         resolved, error = self._resolve_node(node_id_or_name)
         if error:
             result_json = json.dumps(error, ensure_ascii=False)
-            logger.info("Agent tool [get_tools_node_mcp_tools] - done. ok=false session_id=%s", self._context.session_id)
-            _log_tool_result_debug("get_tools_node_mcp_tools", self._context.session_id, result_json)
+            logger.info(
+                "[执行工具失败] tool=get_tools_node_mcp_tools result=%s",
+                result_json,
+            )
             return result_json
 
         if resolved.flow_node_type != "tools":
@@ -230,8 +228,10 @@ class WorkflowGraphMcpTools:
                 "node": {"nodeId": resolved.node_id, "flowNodeType": resolved.flow_node_type, "name": resolved.name},
             }
             result_json = json.dumps(error, ensure_ascii=False)
-            logger.info("Agent tool [get_tools_node_mcp_tools] - done. ok=false session_id=%s", self._context.session_id)
-            _log_tool_result_debug("get_tools_node_mcp_tools", self._context.session_id, result_json)
+            logger.info(
+                "[执行工具失败] tool=get_tools_node_mcp_tools result=%s",
+                result_json,
+            )
             return result_json
 
         graph = self._cache.get_full_show_workflow_graph_dict()
@@ -240,8 +240,10 @@ class WorkflowGraphMcpTools:
         if not isinstance(edges, list) or not isinstance(nodes, list):
             error = {"error": "workflow_graph.edges/nodes is not a list"}
             result_json = json.dumps(error, ensure_ascii=False)
-            logger.info("Agent tool [get_tools_node_mcp_tools] - done. ok=false session_id=%s", self._context.session_id)
-            _log_tool_result_debug("get_tools_node_mcp_tools", self._context.session_id, result_json)
+            logger.info(
+                "[执行工具失败] tool=get_tools_node_mcp_tools result=%s",
+                result_json,
+            )
             return result_json
 
         # 建立 nodeId -> node 的索引，便于遍历 edges 时快速定位目标节点。
@@ -306,12 +308,11 @@ class WorkflowGraphMcpTools:
         }
         result_json = json.dumps(result, ensure_ascii=False)
         logger.info(
-            "Agent tool [get_tools_node_mcp_tools] - done. ok=true toolset_count=%d count=%d session_id=%s",
+            "[执行工具成功] tool=get_tools_node_mcp_tools toolset_count=%d count=%d result=%s",
             len(toolset_nodes),
             len(all_items),
-            self._context.session_id,
+            result_json,
         )
-        _log_tool_result_debug("get_tools_node_mcp_tools", self._context.session_id, result_json)
         return result_json
 
 

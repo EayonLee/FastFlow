@@ -30,9 +30,9 @@ public class ModelConfig {
     private String modelName;
 
     /**
-     * LiteLLM 模型标识（例如：moonshot/kimi-k2.5）
+     * 模型标识（例如：moonshot/kimi-k2.5）
      */
-    private String litellmModel;
+    private String modelId;
 
     /**
      * LiteLLM provider（可选）

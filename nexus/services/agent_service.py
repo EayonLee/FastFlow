@@ -31,12 +31,7 @@ class AgentService:
             logger.error("ChatAgent error: %s", e)
             yield _to_sse({"type": "error", "message": e.message})
         except Exception as e:
-            logger.error(
-                "ChatAgent error with session_id: %s, user_prompt: %s, error: %s",
-                context.session_id,
-                context.user_prompt,
-                e,
-            )
+            logger.error("ChatAgent error. user_prompt=%s error=%s", context.user_prompt, e)
             yield _to_sse({"type": "error", "message": str(e)})
 
         yield SSE_DONE
@@ -45,6 +40,6 @@ class AgentService:
         """
         处理构建型智能体请求（保留入口，内部逻辑已清空）。
         """
-        logger.info("BuilderAgent is disabled. session_id=%s", context.session_id)
+        logger.info("BuilderAgent is disabled.")
         yield _to_sse({"type": "error", "message": "Builder agent is temporarily disabled"})
         yield SSE_DONE

@@ -241,7 +241,7 @@ async function loadModelConfigs() {
     const configs = await getModelConfigs()
     models.value = (configs || []).map((cfg) => ({
       id: cfg.id,
-      label: cfg.modelName || cfg.litellmModel || `Model ${cfg.id}`
+      label: cfg.modelName || cfg.modelId || `Model ${cfg.id}`
     }))
     if (!selectedModel.value && models.value.length > 0) {
       selectedModel.value = models.value[0].id

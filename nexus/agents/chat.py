@@ -188,15 +188,6 @@ class ChatAgent:
         # 预算字段会直接喂给 review 模型，避免“预算已耗尽却继续建议调工具”。
         used_tool_calls = get_tool_message_count(messages)
         remaining_tool_calls = max(0, MAX_TOOL_CALLS_PER_QUESTION - used_tool_calls)
-        logger.debug(
-            "对话执行.ChatAgent._build_review_payload.构建评审输入 "
-            "tool_results=%d candidate_tools=%d used_tool_calls=%d remaining_tool_calls=%d",
-            len(tool_results),
-            len(candidate_tool_summaries),
-            used_tool_calls,
-            remaining_tool_calls,
-        )
-
         return {
             "user_prompt": context.user_prompt,
             "candidate_answer": str(candidate_answer.content or ""),
@@ -230,15 +221,6 @@ class ChatAgent:
         messages = state["messages"]
         review_guidance = str(state.get("review_guidance") or "").strip()
         force_tool_call = bool(state.get("force_tool_call"))
-        logger.debug(
-            "生成回答节点.开始 session_id=%s message_count=%d tool_message_count=%d force_tool_call=%s review_guidance=%s",
-            context.session_id,
-            len(messages),
-            get_tool_message_count(messages),
-            force_tool_call,
-            bool(review_guidance),
-        )
-
         candidate_tools = select_tool_candidates(
             context=context,
             messages=messages,
@@ -254,10 +236,9 @@ class ChatAgent:
         if force_tool_call and tool_choice != "none":
             tool_choice = "required"
         logger.info(
-            "步骤[模型准备]：工具候选=%d，本轮选择=%s，session_id=%s",
+            "[模型调用准备完成] 工具候选=%d 工具选择策略=%s",
             len(candidate_tools),
             tool_choice,
-            context.session_id,
         )
 
         # 将候选工具与 tool_choice 一并绑定到当前 LLM 调用。
@@ -282,11 +263,6 @@ class ChatAgent:
         additional_kwargs = dict(generated_response.additional_kwargs or {})
         if reasoning_content:
             additional_kwargs["reasoning_content"] = reasoning_content
-            logger.debug(
-                "步骤[生成回答]：已解析思考内容并预留，reasoning_len=%d，session_id=%s",
-                len(reasoning_content),
-                context.session_id,
-            )
         if answer_content != str(generated_response.content or "") or reasoning_content:
             generated_response = AIMessage(
                 content=answer_content,
@@ -320,10 +296,9 @@ class ChatAgent:
         else:
             generation_result = "生成最终回答"
         logger.info(
-            "步骤[生成回答]：%s，content_len=%d，session_id=%s",
+            "[模型生成结果] 状态=%s content_len=%d",
             generation_result,
             len(str(generated_response.content or "")),
-            context.session_id,
         )
 
         return {
@@ -351,18 +326,10 @@ class ChatAgent:
         """
         messages = state["messages"]
         review_count = int(state.get("sufficiency_review_count") or 0)
-        logger.debug(
-            "回答充足性复核.开始 session_id=%s review_round=%d pending_answer_requires_review=%s message_count=%d",
-            context.session_id,
-            review_count,
-            bool(state.get("pending_answer_requires_review")),
-            len(messages),
-        )
-
         if review_count >= MAX_ANSWER_SUFFICIENCY_REVIEW_ROUNDS:
             # 防止循环不收敛，超轮次后直接转“请补充信息”。
             user_guidance = build_need_user_input_message(missing_info=[])
-            logger.warning("步骤[充足性复核]：达到最大轮次，转为引导用户补充信息，session_id=%s", context.session_id)
+            logger.warning("[回答充足性复核] 达到最大轮次，改为引导用户补充信息")
             return {
                 "messages": [AIMessage(content=user_guidance)],
                 "pending_answer_requires_review": False,
@@ -373,7 +340,6 @@ class ChatAgent:
             }
 
         if not state.get("pending_answer_requires_review"):
-            logger.debug("回答充足性复核.跳过 session_id=%s reason=no_pending_answer", context.session_id)
             return {
                 "pending_answer_requires_review": False,
                 "sufficiency_review_action": "answer",
@@ -387,7 +353,6 @@ class ChatAgent:
                 break
 
         if pending_answer is None:
-            logger.debug("回答充足性复核.跳过 session_id=%s reason=no_pending_message", context.session_id)
             return {
                 "pending_answer_requires_review": False,
                 "sufficiency_review_action": "answer",
@@ -406,14 +371,6 @@ class ChatAgent:
             # 使用结构化输出
             review_llm, _ = get_llm(config_id, context.auth_token)
             review_llm = review_llm.with_structured_output(AnswerSufficiencyReviewResult)
-            logger.debug(
-                "回答充足性复核.调用模型 session_id=%s review_round=%d candidate_tools=%d tool_results=%d remaining_tool_calls=%s",
-                context.session_id,
-                review_count,
-                len(review_payload["candidate_tools"]),
-                len(review_payload["tool_results"]),
-                review_payload.get("remaining_tool_call_count"),
-            )
             raw_review_result = review_llm.invoke(
                 [
                     SystemMessage(content=CHAT_ANSWER_SUFFICIENCY_REVIEW_PROMPT),
@@ -429,8 +386,7 @@ class ChatAgent:
         except Exception:  # noqa: BLE001
             logger.exception(
                 "对话执行.ChatAgent._run_review_answer_sufficiency.调用复核模型失败 "
-                "session_id=%s review_round=%d",
-                context.session_id,
+                "review_round=%d",
                 review_count,
             )
             review_result_model = AnswerSufficiencyReviewResult(
@@ -464,9 +420,8 @@ class ChatAgent:
         if review_status == "sufficient":
             # 去掉 pending 标记后输出最终答案。
             logger.info(
-                "步骤[充足性复核]：证据充足，直接回答用户。review_round=%d，session_id=%s",
+                "[回答充足性复核] 结果=证据充足，直接回答 review_round=%d",
                 review_count,
-                context.session_id,
             )
             finalized_answer = AIMessage(content=str(pending_answer.content or ""))
             return {
@@ -481,10 +436,9 @@ class ChatAgent:
         if review_status == "need_more_tools":
             # 生成下一轮内部指令，并强制下一轮优先调工具补证据。
             logger.info(
-                "步骤[充足性复核]：证据不足，继续调用工具。建议工具=%s，review_round=%d，session_id=%s",
+                "[回答充足性复核] 结果=证据不足，继续调工具 建议工具=%s review_round=%d",
                 suggested_tool_name,
                 review_count,
-                context.session_id,
             )
             review_guidance = build_review_guidance_message(
                 missing_info=review_result.get("missing_info") or [],
@@ -505,10 +459,9 @@ class ChatAgent:
             user_guidance=str(review_result.get("user_guidance") or ""),
         )
         logger.info(
-            "步骤[充足性复核]：工具无法补齐证据，引导用户补充信息。missing_info=%d，review_round=%d，session_id=%s",
+            "[回答充足性复核] 结果=工具无法补齐证据，转为用户补充 missing_info=%d review_round=%d",
             len(missing_info),
             review_count,
-            context.session_id,
         )
         return {
             "messages": [AIMessage(content=user_guidance)],
@@ -533,7 +486,7 @@ class ChatAgent:
 
         # 构建工作流工具
         tools, _ = build_workflow_tools(context)
-        logger.info("步骤[初始化]：已加载工作流工具 %d 个，session_id=%s", len(tools), context.session_id)
+        logger.info("[初始化工具成功] 已加载工作流工具=%d", len(tools))
 
         generate_node = partial(
             self._run_generate_response_with_tool_context,
@@ -564,23 +517,14 @@ class ChatAgent:
         def route_after_generation(state: ChatState) -> str:
             last_message = state["messages"][-1]
             if isinstance(last_message, AIMessage) and last_message.tool_calls:
-                logger.debug("路由决策.生成后 session_id=%s next=%s reason=tool_calls", context.session_id, NODE_EXECUTE_MODEL_REQUESTED_TOOLS)
                 return NODE_EXECUTE_MODEL_REQUESTED_TOOLS
             if state.get("pending_answer_requires_review"):
-                logger.debug("路由决策.生成后 session_id=%s next=%s reason=pending_review", context.session_id, NODE_REVIEW_ANSWER_SUFFICIENCY)
                 return NODE_REVIEW_ANSWER_SUFFICIENCY
-            logger.debug("路由决策.生成后 session_id=%s next=end reason=direct_answer", context.session_id)
             return "__end__"
 
         def route_after_review(state: ChatState) -> str:
             if str(state.get("sufficiency_review_action") or "") == "call_tool":
-                logger.debug("路由决策.复核后 session_id=%s next=%s action=call_tool", context.session_id, NODE_GENERATE_RESPONSE_WITH_TOOL_CONTEXT)
                 return NODE_GENERATE_RESPONSE_WITH_TOOL_CONTEXT
-            logger.debug(
-                "路由决策.复核后 session_id=%s next=end action=%s",
-                context.session_id,
-                str(state.get("sufficiency_review_action") or "unknown"),
-            )
             return "__end__"
 
         # 生成节点分叉：
@@ -622,13 +566,6 @@ class ChatAgent:
         - review pending 的候选答案不会直接流给用户
         - 最终将用户问题与最终回答写回会话历史
         """
-        logger.info(
-            "步骤[会话开始]：收到用户问题，准备执行。mode=%s model_config_id=%s prompt_len=%d，session_id=%s",
-            context.mode,
-            context.model_config_id,
-            len(str(context.user_prompt or "")),
-            context.session_id,
-        )
         app = self._build_app(context)
         history = get_session_history(context.session_id)
         state: ChatState = {
@@ -686,4 +623,4 @@ class ChatAgent:
         if final_answer:
             # 仅落库最终可见答案，避免把中间候选稿写入历史。
             history.add_ai_message(final_answer)
-        logger.info("步骤[会话结束]：回答已输出并写入历史记录，final_answer_len=%d，session_id=%s", len(final_answer), context.session_id)
+        logger.info("[会话完成并落库] 回答输出完成 final_answer_len=%d", len(final_answer))

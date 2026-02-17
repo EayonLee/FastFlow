@@ -2,6 +2,7 @@ import logging
 import json
 import sys
 import re
+from contextvars import ContextVar, Token
 from datetime import datetime
 from typing import Dict, Any, Optional
 from pathlib import Path
@@ -10,6 +11,46 @@ from loguru import logger as loguru_logger
 from nexus.config.config import get_config
 
 settings = get_config()
+DEFAULT_SESSION_ID = ""
+_SESSION_ID_CONTEXT: ContextVar[str] = ContextVar("session_id", default=DEFAULT_SESSION_ID)
+
+
+def _normalize_session_id(session_id: Optional[str]) -> str:
+    normalized = str(session_id or "").strip()
+    return normalized or DEFAULT_SESSION_ID
+
+
+def set_log_session_id(session_id: Optional[str]) -> Token:
+    """
+    为当前上下文绑定 session_id（协程安全）。
+    """
+    return _SESSION_ID_CONTEXT.set(_normalize_session_id(session_id))
+
+
+def reset_log_session_id(token: Token) -> None:
+    """
+    清理当前上下文绑定的 session_id。
+    """
+    _SESSION_ID_CONTEXT.reset(token)
+
+
+def get_log_session_id() -> str:
+    """
+    获取当前上下文中的 session_id；未绑定时返回空字符串。
+    """
+    return _SESSION_ID_CONTEXT.get()
+
+
+def _patch_log_record_with_session_id(record: Dict[str, Any]) -> None:
+    """
+    统一为 loguru 记录注入 session_id，保证 format 中可直接引用。
+    """
+    extra = record.setdefault("extra", {})
+    if "session_id" not in extra:
+        extra["session_id"] = get_log_session_id()
+    session_id = _normalize_session_id(extra.get("session_id"))
+    extra["session_id"] = session_id
+    extra["session_segment"] = f" - {session_id}" if session_id else ""
 
 class JSONFormatter(logging.Formatter):
     """JSON格式日志格式化器"""
@@ -107,6 +148,7 @@ def setup_logging():
         log_format = (
             '{"timestamp": "{time:YYYY-MM-DD HH:mm:ss.SSS}", '
             '"level": "{level}", '
+            '"session_id": "{extra[session_id]}", '
             '"logger": "{name}", '
             '"message": "{message}", '
             '"module": "{module}", '
@@ -114,7 +156,9 @@ def setup_logging():
             '"line": {line}}'
         )
     else:
-        log_format = "{time:YYYY-MM-DD HH:mm:ss} - {name} - {level} - {message}"
+        log_format = "{time:YYYY-MM-DD HH:mm:ss} - {level}{extra[session_segment]} - {name} - {message}"
+
+    loguru_logger.configure(patcher=_patch_log_record_with_session_id)
     
     # 控制台处理器
     if log_output in ["console", "both"]:
@@ -190,7 +234,7 @@ def setup_logging():
                 frame = frame.f_back
                 depth += 1
             
-            loguru_logger.opt(depth=depth, exception=record.exc_info).log(
+            loguru_logger.bind(session_id=get_log_session_id()).opt(depth=depth, exception=record.exc_info).log(
                 level, record.getMessage()
             )
     

@@ -18,10 +18,7 @@ from __future__ import annotations
 from threading import RLock
 from typing import Any, Dict, List
 
-from nexus.config.logger import get_logger
 from nexus.core.schemas import ChatRequestContext
-
-logger = get_logger(__name__)
 
 CACHE_KEY_WORKFLOW_GRAPH = "workflow_graph"
 CACHE_KEY_WORKFLOW_META = "workflow_meta"
@@ -163,16 +160,6 @@ def _get_cached_workflow_meta(session_id: str) -> Dict[str, str] | None:
     if not isinstance(workflow_meta, dict):
         return None
     return _normalize_workflow_meta(workflow_meta)
-
-
-def _log_tool_result_debug(tool_name: str, session_id: str | None, result_json: str) -> None:
-    """
-    统一打印“工具最终返回值”的 debug 日志。
-
-    说明：
-    - 工具返回往往是较大的 JSON，info 打印会淹没正常日志，所以统一走 debug。
-    """
-    logger.debug("Agent tool [%s] - tool result. session_id=%s result=%s", tool_name, session_id, result_json)
 
 
 def _prune_io_items(items: Any, drop_fields: List[str]) -> List[Dict[str, Any]]:

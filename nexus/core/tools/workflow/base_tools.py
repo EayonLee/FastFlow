@@ -22,7 +22,7 @@ from langchain_core.tools import tool
 from nexus.config.logger import get_logger
 from nexus.core.schemas import ChatRequestContext
 
-from .cache import WorkflowGraphCache, _log_tool_result_debug
+from .cache import WorkflowGraphCache
 
 logger = get_logger(__name__)
 
@@ -53,27 +53,26 @@ class WorkflowGraphTools:
         """
         工作流图工具：返回完整工作流图 JSON。
         """
-        logger.debug("执行工具[get_full_workflow_graph]：开始，session_id=%s", self.context.session_id)
         full_workflow_graph = self._cache.get_full_show_workflow_graph_dict()
         result_json = json.dumps(full_workflow_graph, ensure_ascii=False)
         logger.info(
-            "步骤[执行工具]：完成 get_full_workflow_graph。结果=nodes:%d edges:%d，session_id=%s",
+            "[执行工具成功] tool=get_full_workflow_graph nodes=%d edges=%d result=%s",
             len(full_workflow_graph.get("nodes", [])),
             len(full_workflow_graph.get("edges", [])),
-            self.context.session_id,
+            result_json,
         )
-        _log_tool_result_debug("get_full_workflow_graph", self.context.session_id, result_json)
         return result_json
 
     def get_workflow_meta(self) -> str:
         """
         工作流图工具：返回工作流元信息 JSON。
         """
-        logger.debug("执行工具[get_workflow_meta]：开始，session_id=%s", self.context.session_id)
         workflow_meta = self._cache.get_workflow_meta_dict()
         result_json = json.dumps(workflow_meta, ensure_ascii=False)
-        logger.info("步骤[执行工具]：完成 get_workflow_meta。结果=已返回元信息，session_id=%s", self.context.session_id)
-        _log_tool_result_debug("get_workflow_meta", self.context.session_id, result_json)
+        logger.info(
+            "[执行工具成功] tool=get_workflow_meta result=%s",
+            result_json,
+        )
         return result_json
 
     def get_workflow_node_info(self, node_id: str) -> str:
@@ -82,11 +81,6 @@ class WorkflowGraphTools:
 
         返回结构与节点检索接口一致，便于前端统一渲染。
         """
-        logger.debug(
-            "执行工具[get_workflow_node_info]：开始 node_id=%s，session_id=%s",
-            node_id,
-            self.context.session_id,
-        )
         full_workflow_graph = self._cache.get_full_show_workflow_graph_dict()
         for node in full_workflow_graph.get("nodes", []):
             if not isinstance(node, dict):
@@ -104,21 +98,17 @@ class WorkflowGraphTools:
             if workflow_graph_node.get("id") == node_id:
                 result_json = json.dumps(workflow_graph_node, ensure_ascii=False)
                 logger.info(
-                    "步骤[执行工具]：完成 get_workflow_node_info。结果=找到节点(type:%s)，session_id=%s",
-                    workflow_graph_node.get("type"),
-                    self.context.session_id,
+                    "[执行工具成功] tool=get_workflow_node_info result=%s",
+                    result_json,
                 )
-                _log_tool_result_debug("get_workflow_node_info", self.context.session_id, result_json)
                 return result_json
         # 未命中时返回统一错误结构。
         error_result = {"error": f"node not found: {node_id}"}
         error_result_json = json.dumps(error_result, ensure_ascii=False)
         logger.info(
-            "步骤[执行工具]：完成 get_workflow_node_info。结果=未找到节点(node_id:%s)，session_id=%s",
-            node_id,
-            self.context.session_id,
+            "[执行工具失败] tool=get_workflow_node_info result=%s",
+            error_result_json,
         )
-        _log_tool_result_debug("get_workflow_node_info", self.context.session_id, error_result_json)
         return error_result_json
 
     def find_workflow_graph_nodes(self, query: str) -> str:
@@ -129,18 +119,12 @@ class WorkflowGraphTools:
         """
         # 统一清洗输入，避免空格和大小写影响匹配结果。
         query_text = (query or "").strip().lower()
-        logger.debug(
-            "执行工具[find_workflow_graph_nodes]：开始 query=%s，session_id=%s",
-            query_text,
-            self.context.session_id,
-        )
         if not query_text:
             empty_result_json = json.dumps([], ensure_ascii=False)
             logger.info(
-                "步骤[执行工具]：完成 find_workflow_graph_nodes。结果=空查询，命中0个节点，session_id=%s",
-                self.context.session_id,
+                "[执行工具成功] tool=find_workflow_graph_nodes result=%s",
+                empty_result_json,
             )
-            _log_tool_result_debug("find_workflow_graph_nodes", self.context.session_id, empty_result_json)
             return empty_result_json
 
         full_workflow_graph = self._cache.get_full_show_workflow_graph_dict()
@@ -174,11 +158,10 @@ class WorkflowGraphTools:
                 )
         result_json = json.dumps(matched_nodes, ensure_ascii=False)
         logger.info(
-            "步骤[执行工具]：完成 find_workflow_graph_nodes。结果=命中%d个节点，session_id=%s",
+            "[执行工具成功] tool=find_workflow_graph_nodes hits=%d result=%s",
             len(matched_nodes),
-            self.context.session_id,
+            result_json,
         )
-        _log_tool_result_debug("find_workflow_graph_nodes", self.context.session_id, result_json)
         return result_json
 
 

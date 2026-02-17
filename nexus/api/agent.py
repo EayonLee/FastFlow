@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from nexus.core.schemas import ChatRequestContext
 from nexus.services.agent_service import AgentService
 from nexus.common.dependencies import get_agent_service
-from nexus.config.logger import get_logger
+from nexus.config.logger import get_logger, reset_log_session_id, set_log_session_id
 from nexus.services.auth_service import check_login
 from nexus.common.exceptions import ParmasValidationError, AuthError
 
@@ -15,8 +15,9 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 
-async def _safe_stream(stream: AsyncGenerator[str, None]) -> AsyncGenerator[str, None]:
+async def _safe_stream(stream: AsyncGenerator[str, None], session_id: str) -> AsyncGenerator[str, None]:
     """包装流式输出，确保异常被记录并转换为 SSE 错误事件。"""
+    token = set_log_session_id(session_id)
     try:
         async for chunk in stream:
             yield chunk
@@ -25,6 +26,8 @@ async def _safe_stream(stream: AsyncGenerator[str, None]) -> AsyncGenerator[str,
         payload = {"type": "error", "message": f"Streaming error: {str(exc)}"}
         yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
+    finally:
+        reset_log_session_id(token)
 
 @router.post("/chat/completions")
 async def chat_completions(
@@ -62,23 +65,21 @@ async def chat_completions(
     if not context.session_id:
         raise ParmasValidationError("session_id is required")
 
-    logger.info(
-        "步骤[接口接收]：收到 %s 请求，model_config_id=%s，prompt_len=%d，session_id=%s",
-        context.mode,
-        context.model_config_id,
-        len(context.user_prompt),
-        context.session_id,
-    )
+    token = set_log_session_id(context.session_id)
+    try:
+        logger.info("[收到用户请求] agent=%s user_prompt=%s", context.mode, context.user_prompt)
 
-    # Chat Agent
-    if context.mode == "chat":
+        # Chat Agent
+        if context.mode == "chat":
+            return StreamingResponse(
+                _safe_stream(agent_service.handle_chat_request(context), context.session_id),
+                media_type="text/event-stream"
+            )
+
+        # Builder Agent
         return StreamingResponse(
-            _safe_stream(agent_service.handle_chat_request(context)),
+            _safe_stream(agent_service.handle_builder_request(context), context.session_id),
             media_type="text/event-stream"
         )
-
-    # Builder Agent
-    return StreamingResponse(
-        _safe_stream(agent_service.handle_builder_request(context)),
-        media_type="text/event-stream"
-    )
+    finally:
+        reset_log_session_id(token)

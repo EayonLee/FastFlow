@@ -199,16 +199,7 @@ def select_tool_candidates(
             continue
         filtered_tools.append(tool)
 
-    selected_tools = filtered_tools or candidate_tools
-    logger.debug(
-        "工具调用策略.select_tool_candidates.候选工具筛选完成 "
-        "session_id=%s total_tools=%d selected_tools=%d focus_text=%s",
-        context.session_id,
-        len(tools),
-        len(selected_tools),
-        bool(focus_text),
-    )
-    return selected_tools
+    return filtered_tools or candidate_tools
 
 
 def resolve_tool_choice(context: ChatRequestContext, messages: Sequence[BaseMessage]) -> str:
@@ -228,40 +219,35 @@ def resolve_tool_choice(context: ChatRequestContext, messages: Sequence[BaseMess
     tool_message_count = get_tool_message_count(messages)
     if tool_message_count >= MAX_TOOL_CALLS_PER_QUESTION:
         logger.info(
-            "步骤[工具选择]：停止调用工具。结果=达到预算上限(%d/%d)，session_id=%s",
+            "[工具选择策略] 动作=停止调工具 原因=达到预算上限(%d/%d)",
             tool_message_count,
             MAX_TOOL_CALLS_PER_QUESTION,
-            context.session_id,
         )
         return "none"
 
     no_new_evidence_streak = _no_new_evidence_streak(messages)
     if no_new_evidence_streak >= NO_NEW_EVIDENCE_STOP_STREAK:
         logger.info(
-            "步骤[工具选择]：停止调用工具。结果=连续无新增证据(%d/%d)，session_id=%s",
+            "[工具选择策略] 动作=停止调工具 原因=连续无新增证据(%d/%d)",
             no_new_evidence_streak,
             NO_NEW_EVIDENCE_STOP_STREAK,
-            context.session_id,
         )
         return "none"
 
     has_tool_result = any(isinstance(message, ToolMessage) for message in messages)
     if has_tool_result:
-        logger.debug(
-            "步骤[工具选择]：继续由模型自主决定是否调工具。结果=auto（已有工具结果），session_id=%s",
-            context.session_id,
+        logger.info(
+            "[工具选择策略] 动作=模型自主决策 结果=auto（已有工具结果）",
         )
         return "auto"
 
     if requires_workflow_graph_tools(context.user_prompt):
-        logger.debug(
-            "步骤[工具选择]：本轮强制先调工具。结果=required（问题依赖工作流上下文），session_id=%s",
-            context.session_id,
+        logger.info(
+            "[工具选择策略] 强制先调工具 结果=required",
         )
         return "required"
 
-    logger.debug(
-        "步骤[工具选择]：由模型自主决定是否调工具。结果=auto（默认策略），session_id=%s",
-        context.session_id,
+    logger.info(
+        "[工具选择策略] 模型自主决策 结果=auto",
     )
     return "auto"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -20,7 +21,7 @@ class LLMRuntime:
 
     model: Any
     adapter: LiteLLMAdapter
-    litellm_model: str
+    model_id: str
     model_config: ModelConfig
 
 
@@ -41,7 +42,7 @@ def _bind_model_with_tools(
     )
     if normalized_tool_choice != tool_choice:
         logger.warning(
-            "步骤[模型准备]：adapter=%s 已重写 tool_choice=%s -> %s，model_config_id=%s",
+            "[模型参数兼容修正] adapter=%s tool_choice=%s->%s model_config_id=%s",
             runtime.adapter.provider_id,
             str(tool_choice),
             str(normalized_tool_choice),
@@ -55,14 +56,15 @@ def _get_runtime(model_config_id: int, auth_token: Optional[str]) -> LLMRuntime:
     cached_runtime = LLM_RUNTIME_CACHE.get(cache_key)
     if cached_runtime is not None:
         logger.info(
-            "步骤[LLM]：命中缓存，adapter=%s model_id=%s model_config_id=%s",
+            "[模型实例获取] 命中缓存 adapter=%s model_id=%s model_params=%s model_config_id=%s",
             cached_runtime.adapter.provider_id,
-            cached_runtime.litellm_model or "unknown",
+            cached_runtime.model_id or "unknown",
+            json.dumps(cached_runtime.model_config.model_params or {}, ensure_ascii=False, sort_keys=True),
             model_config_id,
         )
         return cached_runtime
 
-    logger.info("步骤[LLM]：缓存未命中，开始创建实例，model_config_id=%s", model_config_id)
+    logger.info("[模型实例获取] 缓存未命中，开始创建实例 model_config_id=%s", model_config_id)
     model_config = fetch_model_config(model_config_id, auth_token)
     if not model_config:
         raise BusinessError(f"无法获取模型配置 (ID: {model_config_id})")
@@ -77,14 +79,15 @@ def _get_runtime(model_config_id: int, auth_token: Optional[str]) -> LLMRuntime:
     runtime = LLMRuntime(
         model=model,
         adapter=adapter,
-        litellm_model=str(model_config.litellm_model or ""),
+        model_id=str(model_config.model_id or ""),
         model_config=model_config,
     )
     LLM_RUNTIME_CACHE[cache_key] = runtime
     logger.info(
-        "步骤[LLM]：实例创建成功并写入缓存，adapter=%s model_id=%s model_config_id=%s",
+        "[模型实例获取] 创建成功并写入缓存 adapter=%s model_id=%s model_params=%s model_config_id=%s",
         runtime.adapter.provider_id,
-        runtime.litellm_model or "unknown",
+        runtime.model_id or "unknown",
+        json.dumps(runtime.model_config.model_params or {}, ensure_ascii=False, sort_keys=True),
         model_config_id,
     )
     return runtime

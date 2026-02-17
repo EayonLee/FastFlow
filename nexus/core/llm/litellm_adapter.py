@@ -15,16 +15,9 @@ class LiteLLMAdapter:
     - 统一回答/思考内容拆分
     """
 
-    THINKING_MODEL_MARKERS = ("qwen", "qwq")
-
     @property
     def provider_id(self) -> str:
         return "litellm"
-
-    @staticmethod
-    def _is_model_marker_matched(model_name: str) -> bool:
-        normalized = model_name.lower()
-        return any(marker in normalized for marker in LiteLLMAdapter.THINKING_MODEL_MARKERS)
 
     @staticmethod
     def _parse_think_wrapped_content(content: Any) -> Tuple[str, str]:
@@ -54,9 +47,7 @@ class LiteLLMAdapter:
 
     def _is_thinking_enabled(self, model_config: ModelConfig) -> bool:
         raw_setting = model_config.model_params.get("enable_thinking")
-        if isinstance(raw_setting, bool):
-            return raw_setting
-        return self._is_model_marker_matched(model_config.litellm_model)
+        return raw_setting is True
 
     def build_chat_model(self, model_config: ModelConfig) -> ChatLiteLLM:
         model_kwargs: Dict[str, Any] = dict(model_config.model_params or {})
@@ -64,7 +55,7 @@ class LiteLLMAdapter:
             model_kwargs.setdefault("enable_thinking", True)
 
         llm_kwargs: Dict[str, Any] = {
-            "model": model_config.litellm_model,
+            "model": model_config.model_id,
             "api_key": model_config.api_key,
             "streaming": True,
             "model_kwargs": model_kwargs,
