@@ -34,6 +34,9 @@
   --md-inline-code-text: var(--text-primary);
   --md-quote-bg: rgba(255, 255, 255, 0.03);
   --md-quote-border: color-mix(in srgb, var(--accent-neon) 35%, var(--border-subtle));
+  --ai-bubble-bg: color-mix(in srgb, #0d0d0d 76%, var(--bg-surface));
+  --ai-bubble-border: color-mix(in srgb, #242424 46%, var(--border-subtle));
+  --ai-bubble-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
   
   /* 布局尺寸 */
   --sidebar-width: 280px;
@@ -92,4 +95,7 @@
   --md-inline-code-text: var(--text-primary);
   --md-quote-bg: rgba(15, 23, 42, 0.04);
   --md-quote-border: color-mix(in srgb, var(--accent-neon) 35%, var(--border-subtle));
+  --ai-bubble-bg: #f2f2f2;
+  --ai-bubble-border: color-mix(in srgb, #d6d6d6 55%, var(--border-subtle));
+  --ai-bubble-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }

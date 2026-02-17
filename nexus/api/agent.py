@@ -13,6 +13,11 @@ from nexus.common.exceptions import ParmasValidationError, AuthError
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/agent", tags=["agent"])
+SSE_RESPONSE_HEADERS = {
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
 
 
 async def _safe_stream(stream: AsyncGenerator[str, None], session_id: str) -> AsyncGenerator[str, None]:
@@ -73,13 +78,15 @@ async def chat_completions(
         if context.mode == "chat":
             return StreamingResponse(
                 _safe_stream(agent_service.handle_chat_request(context), context.session_id),
-                media_type="text/event-stream"
+                media_type="text/event-stream",
+                headers=SSE_RESPONSE_HEADERS,
             )
 
         # Builder Agent
         return StreamingResponse(
             _safe_stream(agent_service.handle_builder_request(context), context.session_id),
-            media_type="text/event-stream"
+            media_type="text/event-stream",
+            headers=SSE_RESPONSE_HEADERS,
         )
     finally:
         reset_log_session_id(token)

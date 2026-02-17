@@ -1,6 +1,7 @@
 import { authService } from '@/services/auth.js'
 import { CONFIG } from '@/config/index.js'
 import { Logger } from '@/utils/logger.js'
+import { createParser } from 'eventsource-parser'
 
 /**
  * 生成工作流（调用 Nexus 的流式接口）
@@ -11,11 +12,14 @@ import { Logger } from '@/utils/logger.js'
  * @param {number} params.modelConfigId - 模型配置 ID（后端要求为数字）
  * @param {string|null} params.workflowGraph - 当前画布导出的原始 JSON 字符串（所有模式都传递）
  * @param {{workflow_name?: string, workflow_description?: string}|null} [params.workflowMeta] - 工作流元信息（可选）
- * @param {Function|null} onChunk - 流式内容回调（目前后端未返回 content，可为空）
+ * @param {Function|null} onEvent - 统一事件回调（执行过程/回答增量）
  * @param {Function} onComplete - 成功回调（返回最终 graph）
  * @param {Function} onError - 错误回调（返回 Error）
  */
-async function generateWorkflow(params, onChunk, onComplete, onError) {
+async function generateWorkflow(params, onEvent, onComplete, onError) {
+  let finalGraph = null
+  let streamErrorMessage = ''
+
   try {
     // 读取登录凭证（Nexus 接口需要 Authorization）
     const token = await authService.getToken() || ''
@@ -51,35 +55,33 @@ async function generateWorkflow(params, onChunk, onComplete, onError) {
 
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
-    let finalGraph = null
-    let streamErrorMessage = ''
-
-    // 逐块读取 SSE 数据并解析 data: 行
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      const text = decoder.decode(value)
-      const lines = text.split('\n')
-      
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const json = JSON.parse(line.substring(6))
-            // 流式文本片段（chat/builder 都可能返回）
-            if (json.type === 'chunk' && onChunk) onChunk(json.content)
-            // 后端流式错误（例如鉴权失败/校验失败）
-            if (json.type === 'error') {
-              streamErrorMessage = json.message || json.error || 'Streaming error'
-            }
-            // 最终图结构（仅 builder 会返回）
-            if (json.type === 'graph') {
-              finalGraph = json.data
-            }
-          } catch (e) {
-            // 单行解析失败时跳过，避免阻塞整个流
+    const parser = createParser({
+      onEvent(sseEvent) {
+        const rawData = sseEvent?.data
+        if (!rawData || rawData === '[DONE]') return
+        try {
+          const event = JSON.parse(rawData)
+          if (onEvent) onEvent(event)
+          if (event.type === 'error') {
+            streamErrorMessage = event.message || event.error || 'Streaming error'
           }
+          if (event.type === 'graph') {
+            finalGraph = event.data
+          }
+        } catch (e) {
+          // 单个 SSE 事件解析失败时跳过，避免阻塞整个流
         }
       }
+    })
+
+    // 逐块读取 SSE 数据并交给第三方解析器处理
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) {
+        parser.feed(decoder.decode())
+        break
+      }
+      parser.feed(decoder.decode(value, { stream: true }))
     }
     
     // SSE 结束后，优先处理流式错误

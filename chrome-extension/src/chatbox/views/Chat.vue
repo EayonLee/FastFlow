@@ -4,6 +4,9 @@ import { Bot, MessageSquare, Send, Copy, Check } from 'lucide-vue-next'
 import FlowSelect from '@/components/FlowSelect.vue'
 import Header from '@/components/Header.vue'
 import MermaidViewer from '@/chatbox/components/MermaidViewer.vue'
+import AgentExecutionTimeline from '@/chatbox/components/AgentExecutionTimeline.vue'
+import AgentAnswerContent from '@/chatbox/components/AgentAnswerContent.vue'
+import AgentThinkingPanel from '@/chatbox/components/AgentThinkingPanel.vue'
 import { useCopyFeedback } from '@/composables/useCopyFeedback.js'
 import { useResizable } from '@/composables/useResizable.js'
 import { useStreamTypewriter } from '@/composables/useStreamTypewriter.js'
@@ -101,6 +104,7 @@ const resizer = useResizable(containerRef, {
 const streamTypewriter = useStreamTypewriter({
   charsPerTick: 1,
   intervalMs: 16,
+  flushOnHidden: true,
   onText: (id, text) => {
     updateMessage(id, (target) => {
       if (target.isLoading) target.isLoading = false
@@ -143,15 +147,27 @@ function scheduleViewerRerender() {
   })
 }
 
+function markRuntimeCompleted(messageId) {
+  if (!messageId) return
+  updateMessage(messageId, (target) => {
+    target.runtimeCompleted = true
+  })
+}
+
 // 创建消息对象（统一时间格式）
 function createMessage(content, type, extra = {}) {
-  return {
+  const base = {
     id: generateUuid32(),
     type,
     content,
     timestamp: formatDateTime(new Date()),
-    ...extra
+    executionEvents: type === 'ai' ? [] : undefined,
+    thinkingContent: type === 'ai' ? '' : undefined,
+    executionPanelOpen: type === 'ai' ? false : undefined,
+    thinkingPanelOpen: type === 'ai' ? false : undefined,
+    runtimeCompleted: type === 'ai' ? false : undefined
   }
+  return { ...base, ...extra }
 }
 
 // 根据消息 ID 查找消息对象
@@ -181,7 +197,47 @@ function setMessageError(id, message) {
 // 将流式文本追加到指定消息
 function appendChunkToMessage(id, chunk) {
   if (!chunk) return
+  // 浏览器后台标签页会对定时器强节流：隐藏时直接输出，避免“看起来不继续”。
+  if (document.visibilityState === 'hidden') {
+    streamTypewriter.flush(id)
+    updateMessage(id, (target) => {
+      if (target.isLoading) target.isLoading = false
+      target.content = `${target.content || ''}${chunk}`
+    })
+    scrollToBottom()
+    return
+  }
   streamTypewriter.enqueue(id, chunk)
+}
+
+function appendExecutionEvent(id, event) {
+  if (!event || !event.type) return
+  updateMessage(id, (target) => {
+    if (!Array.isArray(target.executionEvents)) target.executionEvents = []
+    target.executionEvents.push({
+      id: `${target.executionEvents.length + 1}-${Date.now()}`,
+      type: event.type,
+      message: event.message || '',
+      toolName: event.tool_name || '',
+      status: event.status || '',
+      elapsedMs: Number.isFinite(event.elapsed_ms) ? event.elapsed_ms : null,
+      ts: event.ts || ''
+    })
+  })
+  scrollToBottom()
+}
+
+function appendThinkingContent(id, text, mode = 'append') {
+  if (!text) return
+  updateMessage(id, (target) => {
+    const current = String(target.thinkingContent || '')
+    if (mode === 'replace') {
+      target.thinkingContent = text
+      return
+    }
+    target.thinkingContent = `${current}${text}`
+  })
+  scrollToBottom()
 }
 
 onMounted(async () => {
@@ -212,6 +268,10 @@ onUnmounted(() => {
   // 清理流式打字机定时器
   streamTypewriter.cleanup()
   resizer.cleanup()
+  if (mermaidRenderTimer) {
+    clearTimeout(mermaidRenderTimer)
+    mermaidRenderTimer = null
+  }
 
   if (unsubscribeViewerTheme) {
     unsubscribeViewerTheme()
@@ -287,22 +347,25 @@ function scrollToBottom() {
       messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
     }
   })
-
-  scheduleMermaidRender()
 }
 
 let mermaidRenderTimer = null
-function scheduleMermaidRender() {
-  // 这里必须做 debounce（每次有新内容都重置），否则流式更新会不断重绘 v-html，
-  // 造成“渲染了又被覆盖”，用户体验上会表现为“只有全部输出完才出现图”。
-  if (mermaidRenderTimer) clearTimeout(mermaidRenderTimer)
+function renderMermaidOnceAfterReply() {
+  if (mermaidRenderTimer) return
   mermaidRenderTimer = setTimeout(() => {
     mermaidRenderTimer = null
     nextTick(() => {
       if (!messagesContainer.value) return
       renderMermaidInElement(messagesContainer.value)
     })
-  }, 300)
+  }, 80)
+}
+
+function renderMermaidNow() {
+  nextTick(() => {
+    if (!messagesContainer.value) return
+    renderMermaidInElement(messagesContainer.value)
+  })
 }
 
 function handleMessagesClick(e) {
@@ -338,6 +401,14 @@ function renderMessageContent(content) {
   return renderMarkdown(content || '')
 }
 
+function shouldShowRuntimePanels(message) {
+  if (!message || message.type !== 'ai') return false
+  if (message.isLoading) return true
+  if (message.runtimeCompleted) return true
+  if (Array.isArray(message.executionEvents) && message.executionEvents.length > 0) return true
+  return !!String(message.thinkingContent || '').trim()
+}
+
 // 发送消息处理逻辑
 async function handleGenerate() {
   // 1) 校验输入
@@ -357,7 +428,22 @@ async function handleGenerate() {
 
   // 4) 显示加载中消息（用于流式更新）
   const loadingMsgId = generateUuid32() // 使用 32 位 UUID，避免冲突
-  messages.value.push(createMessage('', 'ai', { id: loadingMsgId, isLoading: true }))
+  messages.value.push(
+    createMessage('', 'ai', {
+      id: loadingMsgId,
+      isLoading: true,
+      executionEvents: [
+        {
+          id: `boot-${Date.now()}`,
+          type: 'phase.started',
+          message: '等待模型分析用户问题',
+          status: 'running',
+          elapsedMs: null,
+          ts: ''
+        }
+      ]
+    })
+  )
   scrollToBottom()
 
   const isChatAgent = selectedAgent.value === 'chat'
@@ -390,9 +476,36 @@ async function handleGenerate() {
       workflowGraph,
       workflowMeta
     },
-    (chunk) => {
-      // Chat/Builder 的流式文本统一追加到消息里
-      appendChunkToMessage(loadingMsgId, chunk)
+    (event) => {
+      if (!event || !event.type) return
+      if (event.type === 'answer.delta') {
+        appendChunkToMessage(loadingMsgId, event.content || '')
+        return
+      }
+      if (event.type === 'answer.done') {
+        markRuntimeCompleted(loadingMsgId)
+        return
+      }
+      if (event.type === 'answer.reset') {
+        streamTypewriter.clear(loadingMsgId)
+        updateMessage(loadingMsgId, (target) => {
+          target.content = ''
+        })
+        appendExecutionEvent(loadingMsgId, event)
+        return
+      }
+      if (event.type === 'thinking.delta') {
+        appendThinkingContent(loadingMsgId, event.content || '', 'append')
+        return
+      }
+      if (event.type === 'thinking.summary') {
+        appendThinkingContent(loadingMsgId, event.content || '', 'replace')
+        return
+      }
+      appendExecutionEvent(loadingMsgId, event)
+      if (event.type === 'run.completed') {
+        markRuntimeCompleted(loadingMsgId)
+      }
     },
     (graphData) => {
       // Chat 智能体不返回图，直接结束
@@ -402,6 +515,8 @@ async function handleGenerate() {
           updateMessage(loadingMsgId, (target) => {
             if (target.isLoading) target.isLoading = false
           })
+          markRuntimeCompleted(loadingMsgId)
+          renderMermaidOnceAfterReply()
           isLoading.value = false
         })
         return
@@ -431,6 +546,7 @@ async function handleGenerate() {
               targetMsg.content = '🎉 新画布渲染成功！'
               scrollToBottom()
             }
+            renderMermaidNow()
             isLoading.value = false
           },
           () => {
@@ -504,7 +620,15 @@ function handleKeydown(e) {
             v-for="msg in messages" 
             :key="msg.id" 
             class="message-wrapper" 
-            :class="msg.type"
+            :class="[
+              msg.type,
+              {
+                'has-runtime-details': msg.type === 'ai' && (
+                  (Array.isArray(msg.executionEvents) && msg.executionEvents.length > 0) ||
+                  String(msg.thinkingContent || '').trim()
+                )
+              }
+            ]"
           >
             <div class="message-content-box">
               <div class="msg-header">
@@ -520,14 +644,23 @@ function handleKeydown(e) {
                   <Copy v-else size="12" />
                 </button>
               </div>
-              <div class="msg-body">
-                <div v-if="msg.isLoading" class="typing-indicator">
-                  <div class="typing-dot"></div>
-                  <div class="typing-dot"></div>
-                  <div class="typing-dot"></div>
-                </div>
-                <div v-else class="msg-markdown" v-html="renderMessageContent(msg.content)"></div>
-              </div>
+              <AgentExecutionTimeline
+                v-if="shouldShowRuntimePanels(msg)"
+                :events="Array.isArray(msg.executionEvents) ? msg.executionEvents : []"
+                :open="msg.executionPanelOpen !== false"
+                :completed="!!msg.runtimeCompleted"
+              />
+              <AgentThinkingPanel
+                v-if="shouldShowRuntimePanels(msg)"
+                :content="String(msg.thinkingContent || '')"
+                :open="msg.thinkingPanelOpen !== false"
+                :completed="!!msg.runtimeCompleted"
+                :placeholder="shouldShowRuntimePanels(msg)"
+              />
+              <AgentAnswerContent
+                :is-loading="!!msg.isLoading"
+                :content-html="renderMessageContent(msg.content)"
+              />
             </div>
           </div>
     </div>
@@ -595,17 +728,3 @@ function handleKeydown(e) {
     </div>
   </div>
 </template>
-
-<style scoped>
-/* 
-  Vue 视图组件样式
-  这里主要保留对图标和布局的微调，大部分样式在 styles/components/chat.css 中定义
-*/
-.chat-view {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-}
-/* 确保图标垂直居中 */
-.lucide {
-  vertical-align: middle;
-}
-</style>

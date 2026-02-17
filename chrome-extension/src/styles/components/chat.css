@@ -203,7 +203,7 @@
     display: flex;
     flex-direction: column;
     width: fit-content;
-    max-width: 85%;
+    max-width: min(76%, 680px);
     animation: slideIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
     /* 移除之前的 hack margin，使用标准的 padding 控制布局 */
     margin-left: 0;
@@ -211,6 +211,11 @@
 }
 .message-wrapper.ai { align-self: flex-start; }
 .message-wrapper.user { align-self: flex-end; align-items: flex-end; }
+
+#fastflow-copilot-container .message-wrapper.ai.has-runtime-details {
+    width: min(76%, 680px);
+    max-width: min(76%, 680px);
+}
 
 .message-content-box {
     display: flex;
@@ -221,6 +226,10 @@
     gap: 6px;
 }
 .message-wrapper.user .message-content-box { align-items: flex-end; }
+
+#fastflow-copilot-container .message-wrapper.ai.has-runtime-details .message-content-box {
+    width: 100%;
+}
 
 .msg-header {
     display: flex;
@@ -235,9 +244,9 @@
 #fastflow-copilot-container .msg-body {
     display: inline-block;
     width: fit-content;
-    max-width: 100%;
+    max-width: min(100%, 680px);
     min-width: 0;
-    padding: 10px 14px; /* 消息气泡内部文字边距 */
+    padding: 12px 16px; /* 消息气泡内部文字边距（恢复紧凑版） */
     border-radius: 12px;
     font-size: 14px;
     line-height: 1.5;
@@ -251,34 +260,58 @@
     position: relative;
 }
 
+#fastflow-copilot-container .runtime-panel,
+#fastflow-copilot-container .thinking-panel {
+    max-width: min(100%, 680px);
+}
+
+#fastflow-copilot-container .message-wrapper.ai.has-runtime-details .msg-body,
+#fastflow-copilot-container .message-wrapper.ai.has-runtime-details .runtime-panel,
+#fastflow-copilot-container .message-wrapper.ai.has-runtime-details .thinking-panel {
+    width: 100%;
+    max-width: 100%;
+}
+
 #fastflow-copilot-container .msg-body span {
     white-space: pre-wrap; /* 保证消息内容中的 \n 在 span 内也能生效 */
 }
 
 #fastflow-copilot-container .msg-markdown {
     white-space: normal;
+    line-height: 1.72;
+    /* Markdown 纵向节奏变量：标题分隔大一点，标题后的正文紧一点 */
+    --md-gap-base: 14px;
+    --md-gap-heading-lead: 22px;
+    --md-gap-heading-tail: 10px;
+    --md-gap-heading-chain: 26px;
+}
+
+#fastflow-copilot-container .msg-markdown > * {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+#fastflow-copilot-container .msg-markdown > * + * {
+    /* 兜底间距；具体到标题相关场景由后面的最终规则覆盖 */
+    margin-top: var(--md-gap-base);
 }
 
 #fastflow-copilot-container .msg-markdown p {
     margin: 0;
 }
 
-#fastflow-copilot-container .msg-markdown p + p {
-    margin-top: 8px;
-}
-
 #fastflow-copilot-container .msg-markdown ul {
-    margin: 8px 0 0 18px;
-    padding: 0;
+    margin: 0;
+    padding-left: 24px;
 }
 
 #fastflow-copilot-container .msg-markdown ol {
-    margin: 8px 0 0 22px;
-    padding: 0;
+    margin: 0;
+    padding-left: 28px;
 }
 
 #fastflow-copilot-container .msg-markdown li {
-    margin: 4px 0;
+    margin: 10px 0;
 }
 
 #fastflow-copilot-container .msg-markdown h1,
@@ -287,8 +320,8 @@
 #fastflow-copilot-container .msg-markdown h4,
 #fastflow-copilot-container .msg-markdown h5,
 #fastflow-copilot-container .msg-markdown h6 {
-    margin: 10px 0 0;
-    line-height: 1.3;
+    margin: 0;
+    line-height: 1.36;
     font-weight: 700;
 }
 
@@ -304,12 +337,12 @@
     border: 0;
     height: 1px;
     background: color-mix(in srgb, var(--border-subtle) 70%, transparent);
-    margin: 12px 0;
+    margin: 0;
 }
 
 #fastflow-copilot-container .msg-markdown blockquote {
-    margin: 12px 0 0;
-    padding: 8px 10px;
+    margin: 0;
+    padding: 14px 16px;
     border-left: 3px solid var(--md-quote-border);
     background: var(--md-quote-bg);
     border-radius: 6px;
@@ -324,7 +357,7 @@
 }
 
 #fastflow-copilot-container .msg-markdown blockquote p + p {
-    margin-top: 6px;
+    margin-top: 12px;
 }
 
 #fastflow-copilot-container .msg-markdown a {
@@ -347,7 +380,7 @@
 }
 
 #fastflow-copilot-container .msg-markdown .msg-table-wrap {
-    margin-top: 10px;
+    margin-top: 0;
     width: 100%;
     overflow-x: auto;
 }
@@ -389,8 +422,8 @@
 
 #fastflow-copilot-container .msg-markdown pre.msg-code-block {
     /* fenced code block 前后留出一行间距，避免紧贴上下文内容 */
-    margin: 12px 0;
-    padding: 10px 12px;
+    margin: 0;
+    padding: 16px 18px;
     border-radius: 8px;
     border: 1px solid var(--code-block-border);
     background: var(--code-block-bg);
@@ -462,8 +495,8 @@
 /* Mermaid 图渲染容器（由 utils/mermaid.js 将代码块替换为 SVG） */
 #fastflow-copilot-container .msg-markdown .msg-mermaid {
     /* Mermaid 图块前后留出一行间距，避免紧贴上下文内容 */
-    margin: 12px 0;
-    padding: 10px 12px;
+    margin: 0;
+    padding: 16px 18px;
     border-radius: 8px;
     border: 1px solid var(--code-block-border);
     background: var(--code-block-bg);
@@ -490,6 +523,46 @@
     margin-top: 8px;
     font-size: 12px;
     color: rgba(255, 90, 90, 0.95);
+}
+
+/* Markdown 最终节奏规则（放在块样式定义之后，确保不被后续 margin 重置覆盖） */
+#fastflow-copilot-container .msg-markdown > :is(
+    h1, h2, h3, h4, h5, h6,
+    p, ul, ol, blockquote, hr,
+    pre.msg-code-block, .msg-mermaid, .msg-table-wrap
+) {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+#fastflow-copilot-container .msg-markdown > :is(
+    h1, h2, h3, h4, h5, h6,
+    p, ul, ol, blockquote, hr,
+    pre.msg-code-block, .msg-mermaid, .msg-table-wrap
+) + :is(
+    h1, h2, h3, h4, h5, h6,
+    p, ul, ol, blockquote, hr,
+    pre.msg-code-block, .msg-mermaid, .msg-table-wrap
+) {
+    margin-top: var(--md-gap-base);
+}
+
+/* 正文后接标题：拉开层级分隔 */
+#fastflow-copilot-container .msg-markdown > :not(:is(h1, h2, h3, h4, h5, h6))
++ :is(h1, h2, h3, h4, h5, h6) {
+    margin-top: var(--md-gap-heading-lead);
+}
+
+/* 标题后接正文：保持标题与内容的自然贴合 */
+#fastflow-copilot-container .msg-markdown > :is(h1, h2, h3, h4, h5, h6)
++ :not(:is(h1, h2, h3, h4, h5, h6)) {
+    margin-top: var(--md-gap-heading-tail);
+}
+
+/* 连续标题：保留更明显的分隔 */
+#fastflow-copilot-container .msg-markdown > :is(h1, h2, h3, h4, h5, h6)
++ :is(h1, h2, h3, h4, h5, h6) {
+    margin-top: var(--md-gap-heading-chain);
 }
 
 /* Mermaid 放大预览：全屏遮罩 + 画布（SVG 内部由 svg-pan-zoom 控制拖拽缩放） */
@@ -699,23 +772,12 @@
 }
 
 .message-wrapper.ai .msg-body {
-    background: var(--bg-app); /* Darker surface */
-    border: 1px solid var(--border-subtle);
+    background: var(--ai-bubble-bg);
+    border: 1px solid var(--ai-bubble-border);
     border-top-left-radius: 2px;
     color: var(--text-primary);
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-}
-/* AI Decor line */
-.message-wrapper.ai .msg-body {
+    box-shadow: var(--ai-bubble-shadow);
     position: relative;
-    overflow: hidden;
-}
-.message-wrapper.ai .msg-body::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; bottom: 0;
-    width: 2px;
-    background: var(--border-subtle);
 }
 
 .message-wrapper.user .msg-body {

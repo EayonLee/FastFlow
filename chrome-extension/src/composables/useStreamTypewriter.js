@@ -10,9 +10,11 @@ export function useStreamTypewriter(options = {}) {
   const charsPerTick = options.charsPerTick ?? DEFAULT_CHARS_PER_TICK
   const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS
   const onText = options.onText
+  const flushOnHidden = options.flushOnHidden ?? false
 
   // key: messageId -> 当前消息的打字状态
   const stateMap = new Map()
+  let visibilityChangeHandler = null
 
   // 读取或创建状态对象
   function ensureState(messageId) {
@@ -87,17 +89,57 @@ export function useStreamTypewriter(options = {}) {
     stateMap.delete(messageId)
   }
 
+  // 立即输出指定消息的全部缓冲文本（用于后台页避免计时器节流）
+  function flush(messageId) {
+    const state = stateMap.get(messageId)
+    if (!state) return
+    if (state.timerId != null) {
+      window.clearTimeout(state.timerId)
+      state.timerId = null
+    }
+    const text = state.buffer
+    state.buffer = ''
+    if (text && onText) onText(messageId, text)
+    while (state.waiters.length) {
+      const resolve = state.waiters.shift()
+      resolve()
+    }
+    stateMap.delete(messageId)
+  }
+
+  // 立即输出所有消息缓冲文本
+  function flushAll() {
+    for (const messageId of stateMap.keys()) {
+      flush(messageId)
+    }
+  }
+
   // 清理所有消息状态
   function cleanup() {
+    if (visibilityChangeHandler) {
+      document.removeEventListener('visibilitychange', visibilityChangeHandler)
+      visibilityChangeHandler = null
+    }
     for (const messageId of stateMap.keys()) {
       clear(messageId)
     }
+  }
+
+  if (flushOnHidden && typeof document !== 'undefined') {
+    visibilityChangeHandler = () => {
+      if (document.visibilityState === 'hidden') {
+        flushAll()
+      }
+    }
+    document.addEventListener('visibilitychange', visibilityChangeHandler)
   }
 
   return {
     enqueue,
     drain,
     clear,
+    flush,
+    flushAll,
     cleanup
   }
 }

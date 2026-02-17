@@ -12,6 +12,23 @@ from pydantic import BaseModel, Field, field_validator
 
 from nexus.common.exceptions import BusinessError
 from nexus.config.logger import get_logger
+from nexus.core.event import (
+    PHASE_ANALYZE_QUESTION,
+    PHASE_EXECUTE_TOOLS,
+    PHASE_GENERATE_FINAL_ANSWER,
+    PHASE_REVIEW_ANSWER,
+    PhaseTracker,
+    ToolExecutionTracker,
+    build_answer_delta_event,
+    build_answer_done_event,
+    build_run_completed_event,
+    build_run_started_event,
+    build_thinking_delta_event,
+    build_thinking_summary_event,
+    extract_reasoning_from_stream_chunk,
+    extract_text_from_stream_content,
+    is_tool_execution_failed,
+)
 from nexus.core.llm import get_llm
 from nexus.core.memory.memory_manager import get_session_history
 from nexus.core.policies import (
@@ -138,6 +155,21 @@ class ChatAgent:
         }
         return [tool for tool in tools if str(getattr(tool, "name", "") or "").strip() not in used_tool_names]
 
+    @staticmethod
+    def _emit_custom_stream_event(event_type: str, **payload: Any) -> None:
+        """向 LangGraph custom stream 写入事件；在非流式上下文中静默忽略。"""
+        try:
+            from langgraph.config import get_stream_writer
+
+            stream_writer = get_stream_writer()
+        except Exception:
+            stream_writer = None
+        if stream_writer is None:
+            return
+        event_payload = {"event": event_type}
+        event_payload.update(payload)
+        stream_writer(event_payload)
+
     def _build_review_payload(
         self,
         *,
@@ -199,24 +231,6 @@ class ChatAgent:
             "max_tool_call_count": MAX_TOOL_CALLS_PER_QUESTION,
         }
 
-    @staticmethod
-    def _extract_text_from_stream_chunk(content: Any) -> str:
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            parts: List[str] = []
-            for item in content:
-                if isinstance(item, str):
-                    parts.append(item)
-                    continue
-                if not isinstance(item, dict):
-                    continue
-                text = str(item.get("text") or item.get("content") or "").strip()
-                if text:
-                    parts.append(text)
-            return "".join(parts)
-        return str(content or "")
-
     async def _run_llm_answer(
         self,
         state: ChatState,
@@ -276,22 +290,28 @@ class ChatAgent:
             requires_workflow_graph_tools(context.user_prompt)
             or any(isinstance(message, ToolMessage) for message in messages)
         )
-        allow_stream_output = not should_review_generated_answer
+        # 统一开启 token 流输出：若后续 review 判定证据不足，会通过 answer_reset 事件撤回候选回答。
+        allow_stream_output = True
         stream_writer = None
-        if allow_stream_output:
-            try:
-                from langgraph.config import get_stream_writer
+        try:
+            from langgraph.config import get_stream_writer
 
-                stream_writer = get_stream_writer()
-            except Exception:
-                stream_writer = None
+            stream_writer = get_stream_writer()
+        except Exception:
+            stream_writer = None
 
         streamed_response = None
+        streamed_reasoning = False
         async for chunk in llm.astream(llm_messages):
             streamed_response = chunk if streamed_response is None else streamed_response + chunk
-            if stream_writer is None:
+            if stream_writer is not None:
+                reasoning_delta = extract_reasoning_from_stream_chunk(chunk)
+                if reasoning_delta:
+                    streamed_reasoning = True
+                    stream_writer({"event": "thinking", "text": reasoning_delta})
+            if stream_writer is None or not allow_stream_output:
                 continue
-            delta_text = self._extract_text_from_stream_chunk(getattr(chunk, "content", ""))
+            delta_text = extract_text_from_stream_content(getattr(chunk, "content", ""))
             if delta_text:
                 stream_writer({"event": "token", "text": delta_text})
 
@@ -324,6 +344,8 @@ class ChatAgent:
                 tool_calls=generated_response.tool_calls,
                 id=generated_response.id,
             )
+        if stream_writer is not None and reasoning_content and not streamed_reasoning:
+            stream_writer({"event": "thinking_summary", "text": reasoning_content})
 
         pending_review = False
         if not generated_response.tool_calls and should_review_generated_answer:
@@ -379,6 +401,10 @@ class ChatAgent:
             # 防止循环不收敛，超轮次后直接转“请补充信息”。
             user_guidance = build_need_user_input_message(missing_info=[])
             logger.warning("[回答充足性复核] 达到最大轮次，改为引导用户补充信息")
+            self._emit_custom_stream_event(
+                "answer_reset",
+                message="候选回答未通过审查，已切换为用户补充引导",
+            )
             return {
                 "messages": [AIMessage(content=user_guidance)],
                 "pending_answer_requires_review": False,
@@ -472,7 +498,14 @@ class ChatAgent:
                 "[回答充足性复核] 结果=证据充足，直接回答 review_round=%d",
                 review_count,
             )
-            finalized_answer = AIMessage(content=str(pending_answer.content or ""))
+            finalized_answer_kwargs = dict(pending_answer.additional_kwargs or {})
+            finalized_answer_kwargs.pop(REVIEW_PENDING_ANSWER_FLAG, None)
+            finalized_answer = AIMessage(
+                content=str(pending_answer.content or ""),
+                additional_kwargs=finalized_answer_kwargs,
+                response_metadata=pending_answer.response_metadata,
+                id=pending_answer.id,
+            )
             return {
                 "messages": [finalized_answer],
                 "pending_answer_requires_review": False,
@@ -488,6 +521,10 @@ class ChatAgent:
                 "[回答充足性复核] 结果=证据不足，继续调工具 建议工具=%s review_round=%d",
                 suggested_tool_name,
                 review_count,
+            )
+            self._emit_custom_stream_event(
+                "answer_reset",
+                message="候选回答未通过审查，继续调用工具补充证据",
             )
             review_guidance = build_review_guidance_message(
                 missing_info=review_result.get("missing_info") or [],
@@ -506,6 +543,10 @@ class ChatAgent:
         user_guidance = build_need_user_input_message(
             missing_info=missing_info,
             user_guidance=str(review_result.get("user_guidance") or ""),
+        )
+        self._emit_custom_stream_event(
+            "answer_reset",
+            message="候选回答未通过审查，当前需要用户补充信息",
         )
         logger.info(
             "[回答充足性复核] 结果=工具无法补齐证据，转为用户补充 missing_info=%d review_round=%d",
@@ -605,13 +646,13 @@ class ChatAgent:
         # 返回可执行图实例，供流式会话调用。
         return workflow.compile()
 
-    async def achat(self, context: ChatRequestContext) -> AsyncGenerator[str, None]:
+    async def achat(self, context: ChatRequestContext) -> AsyncGenerator[Dict[str, Any], None]:
         """
         处理流式对话请求（按增量文本输出）。
 
         实现要点：
-        - 只向外输出最终可见答案文本，不输出工具调用消息
-        - review pending 的候选答案不会直接流给用户
+        - 对外统一输出“事件对象”，前端可解耦渲染“执行过程”和“最终回答”
+        - review pending 的候选回答不会直接对用户展示
         - 最终将用户问题与最终回答写回会话历史
         """
         app = self._build_app(context)
@@ -631,6 +672,15 @@ class ChatAgent:
 
         answer_parts: List[str] = []
         last_emitted = ""
+        last_processed_message_count = 0
+        review_started_emitted = False
+        last_emitted_thinking = ""
+        tool_tracker = ToolExecutionTracker()
+        phase_tracker = PhaseTracker(PHASE_ANALYZE_QUESTION, "开始理解用户问题")
+
+        yield build_run_started_event(agent="chat")
+        for event in phase_tracker.build_start_events():
+            yield event
 
         async for stream_event in app.astream(state, stream_mode=["custom", "values"]):
             mode = "values"
@@ -641,14 +691,40 @@ class ChatAgent:
             if mode == "custom":
                 if not isinstance(update, dict):
                     continue
-                if update.get("event") != "token":
+                custom_event = str(update.get("event") or "").strip()
+                if custom_event == "token":
+                    for event in phase_tracker.transition_to(
+                        PHASE_GENERATE_FINAL_ANSWER,
+                        "开始生成最终回答",
+                    ):
+                        yield event
+                    delta = str(update.get("text") or "")
+                    if not delta:
+                        continue
+                    answer_parts.append(delta)
+                    last_emitted = f"{last_emitted}{delta}"
+                    yield build_answer_delta_event(delta)
                     continue
-                delta = str(update.get("text") or "")
-                if not delta:
+                if custom_event in {"thinking", "thinking_summary"}:
+                    delta = str(update.get("text") or "")
+                    if not delta:
+                        continue
+                    if custom_event == "thinking_summary":
+                        if delta == last_emitted_thinking:
+                            continue
+                        last_emitted_thinking = delta
+                        yield build_thinking_summary_event(delta)
+                        continue
+                    last_emitted_thinking = f"{last_emitted_thinking}{delta}"
+                    yield build_thinking_delta_event(delta)
                     continue
-                answer_parts.append(delta)
-                last_emitted = f"{last_emitted}{delta}"
-                yield delta
+                if custom_event == "answer_reset":
+                    answer_parts.clear()
+                    last_emitted = ""
+                    yield {
+                        "type": "answer.reset",
+                        "message": str(update.get("message") or "候选回答未通过审查，继续补充信息"),
+                    }
                 continue
 
             if mode != "values" or not isinstance(update, dict):
@@ -656,6 +732,49 @@ class ChatAgent:
             messages = update.get("messages")
             if not isinstance(messages, list) or not messages:
                 continue
+            if len(messages) > last_processed_message_count:
+                new_messages = messages[last_processed_message_count:]
+                last_processed_message_count = len(messages)
+                for message in new_messages:
+                    if isinstance(message, AIMessage) and message.tool_calls:
+                        for tool_call in message.tool_calls:
+                            tool_name = str(tool_call.get("name") or "").strip()
+                            if not tool_name:
+                                continue
+                            for event in phase_tracker.transition_to(
+                                PHASE_EXECUTE_TOOLS,
+                                "开始执行工具调用",
+                            ):
+                                yield event
+                            tool_tracker.mark_started(tool_call)
+                            yield {
+                                "type": "tool.selected",
+                                "tool_name": tool_name,
+                                "message": f"模型选择工具：{tool_name}",
+                            }
+                            yield {
+                                "type": "tool.started",
+                                "tool_name": tool_name,
+                                "message": f"开始执行工具：{tool_name}",
+                            }
+                        continue
+                    if isinstance(message, ToolMessage):
+                        tool_name = str(getattr(message, "name", "") or "").strip()
+                        if not tool_name:
+                            continue
+                        elapsed_ms = tool_tracker.pop_elapsed_ms(message)
+                        failed = is_tool_execution_failed(message)
+                        event_type = "tool.failed" if failed else "tool.completed"
+                        message_text = f"工具执行失败：{tool_name}" if failed else f"工具执行完成：{tool_name}"
+                        yield {
+                            "type": event_type,
+                            "tool_name": tool_name,
+                            "status": "failed" if failed else "completed",
+                            "elapsed_ms": elapsed_ms,
+                            "result": str(message.content or ""),
+                            "message": message_text,
+                        }
+
             last_message = messages[-1]
             if isinstance(last_message, ToolMessage):
                 continue
@@ -664,7 +783,25 @@ class ChatAgent:
             if last_message.tool_calls:
                 continue
             if self._is_review_pending_answer_message(last_message):
+                if not review_started_emitted:
+                    review_started_emitted = True
+                    for event in phase_tracker.transition_to(
+                        PHASE_REVIEW_ANSWER,
+                        "开始复核回答充足性",
+                    ):
+                        yield event
+                    yield {
+                        "type": "review.started",
+                        "message": "正在复核回答是否满足用户问题",
+                    }
                 continue
+
+            reasoning_content = str(
+                (last_message.additional_kwargs or {}).get("reasoning_content") or ""
+            ).strip()
+            if reasoning_content and reasoning_content != last_emitted_thinking:
+                last_emitted_thinking = reasoning_content
+                yield build_thinking_summary_event(reasoning_content)
 
             content = last_message.content or ""
             if not content:
@@ -678,9 +815,14 @@ class ChatAgent:
             if not delta:
                 continue
 
+            for event in phase_tracker.transition_to(
+                PHASE_GENERATE_FINAL_ANSWER,
+                "开始生成最终回答",
+            ):
+                yield event
             answer_parts.append(delta)
             last_emitted = content
-            yield delta
+            yield build_answer_delta_event(delta)
 
         # 先记录本轮用户问题，保持会话历史完整可追溯。
         history.add_user_message(context.user_prompt)
@@ -689,4 +831,7 @@ class ChatAgent:
         if final_answer:
             # 仅落库最终可见答案，避免把中间候选稿写入历史。
             history.add_ai_message(final_answer)
+        yield phase_tracker.build_completed_event()
+        yield build_answer_done_event(final_answer)
+        yield build_run_completed_event(final_answer_len=len(final_answer))
         logger.info("[会话完成并落库] 回答输出完成 final_answer_len=%d", len(final_answer))

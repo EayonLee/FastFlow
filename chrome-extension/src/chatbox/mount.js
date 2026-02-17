@@ -9,6 +9,7 @@ import baseCss from '@/styles/base.css?inline'
 import chatCss from '@/styles/components/chat.css?inline'
 import flowSelectCss from '@/styles/components/flow-select.css?inline'
 import headerCss from '@/styles/components/header.css?inline'
+import agentRuntimeCss from '@/styles/components/agent-runtime.css?inline'
 
 /**
  * MountManager
@@ -83,7 +84,8 @@ export class MountManager {
       baseCss, 
       chatCss, 
       flowSelectCss, 
-      headerCss
+      headerCss,
+      agentRuntimeCss
     ].join('\n')
     shadowRoot.appendChild(styleTag)
   }
