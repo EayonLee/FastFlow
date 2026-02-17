@@ -328,14 +328,20 @@ def build_workflow_graph_mcp_tools(context: ChatRequestContext) -> Tuple[List, W
 
     @tool
     def get_toolset_tools(node_id_or_name: str):
-        # 该工具做确定性抽取，并在后端渲染 markdown_table，避免大模型改写工具清单。
-        """工作流图工具：获取指定 toolSet 节点（MCP工具清单节点）暴露的 MCP 工具清单（严格原文抽取）。"""
+        """
+        在已定位到 `toolSet` 节点时调用（参数可传 nodeId 或 name）。
+        严格抽取该节点 `toolList` 原文，返回 `toolSet/count/items/markdown_table`。
+        若节点不存在、命中歧义或节点类型不是 `toolSet`，返回 `{"error": "..."}"`。
+        """
         return tool_impl.get_toolset_tools(node_id_or_name)
 
     @tool
     def get_tools_node_mcp_tools(node_id_or_name: str, handle: Optional[str] = None):
-        # 该工具沿 tools 节点出边找到下挂 toolSet，再合并 toolList（严格原文抽取）。
-        """工作流图工具：获取指定 tools 节点（MCP智能调度节点）下挂的 toolSet 的 MCP 工具清单（严格原文抽取）。"""
+        """
+        在已定位到 `tools` 节点时调用（参数可传 nodeId 或 name）。
+        沿该节点出边聚合下挂 `toolSet` 的 MCP 工具清单；可选 `handle` 用于按 `sourceHandle` 过滤。
+        返回 `toolSets/count/items/markdown_table`；若节点不合法或数据异常，返回 `{"error": "..."}"`。
+        """
         return tool_impl.get_tools_node_mcp_tools(node_id_or_name, handle=handle)
 
     return [get_toolset_tools, get_tools_node_mcp_tools], tool_impl

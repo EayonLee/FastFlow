@@ -177,26 +177,38 @@ def build_workflow_base_tools(context: ChatRequestContext) -> Tuple[List, Workfl
 
     @tool
     def get_full_workflow_graph():
-        # 该输出会被大模型直接消费，因此必须保持 key 稳定（nodes/edges/chatConfig）。
-        """工作流图工具：获取当前工作流图完整结构，包含：节点完整信息、节点连线拓扑关系、全局配置。"""
+        """
+        在需要分析当前工作流整体结构时调用（节点、连线、上下游、拓扑）。
+        返回完整工作流 JSON：`nodes`、`edges`、`chatConfig`。
+        仅询问工作流名称/描述时，优先使用 `get_workflow_meta`。
+        """
         return tool_impl.get_full_workflow_graph()
 
     @tool
     def get_workflow_meta():
-        # 保持返回结构稳定：workflow_name/workflow_description 均存在（可为空字符串）。
-        """工作流图工具：获取当前工作流元信息，包含工作流名称与工作流描述。"""
+        """
+        在只需要工作流名称或描述时调用。
+        返回稳定结构：`workflow_name`、`workflow_description`。
+        不返回节点明细与连线拓扑。
+        """
         return tool_impl.get_workflow_meta()
 
     @tool
     def get_workflow_node_info(node_id: str):
-        # 节点详情会以归一化结构返回（id/type/name/intro/inputs/outputs），便于前端统一渲染。
-        """工作流图工具：根据节点 ID 获取节点详情。"""
+        """
+        在已知 `node_id` 且需要单节点详情时调用。
+        输入必须是节点 ID；返回 `id/type/name/intro/inputs/outputs`。
+        若节点不存在，返回 `{"error": "..."}"`。
+        """
         return tool_impl.get_workflow_node_info(node_id)
 
     @tool
     def find_workflow_graph_nodes(query: str):
-        # 关键词检索为尽力而为，可能返回多个候选。
-        """工作流图工具：按关键词检索节点。"""
+        """
+        在不知道 `node_id`、仅有关键词时调用（节点名/类型/用途）。
+        输入 `query` 会模糊匹配 `nodeId/name/intro/flowNodeType`，返回候选节点数组。
+        若 `query` 为空，返回空数组 `[]`。
+        """
         return tool_impl.find_workflow_graph_nodes(query)
 
     # 返回固定顺序，便于调试与观测。

@@ -27,6 +27,7 @@ from nexus.core.prompts.chat_prompts import (
 )
 from nexus.core.prompts.chat_message import build_need_user_input_message, build_review_guidance_message
 from nexus.core.schemas import ChatRequestContext
+from nexus.core.llm.tool_call_adapter import ensure_tool_call_ids
 from nexus.core.tools.workflow import build_workflow_tools
 
 # 三段式流程：生成回答 -> 执行工具 -> 评审充足性。
@@ -198,7 +199,25 @@ class ChatAgent:
             "max_tool_call_count": MAX_TOOL_CALLS_PER_QUESTION,
         }
 
-    def _run_generate_response_with_tool_context(
+    @staticmethod
+    def _extract_text_from_stream_chunk(content: Any) -> str:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: List[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                    continue
+                if not isinstance(item, dict):
+                    continue
+                text = str(item.get("text") or item.get("content") or "").strip()
+                if text:
+                    parts.append(text)
+            return "".join(parts)
+        return str(content or "")
+
+    async def _run_llm_answer(
         self,
         state: ChatState,
         *,
@@ -253,9 +272,43 @@ class ChatAgent:
             # review 指令只作用于当前轮生成，不写入持久历史。
             llm_messages.append(SystemMessage(content=review_guidance))
 
-        generated_response = llm.invoke(llm_messages)
-        if not isinstance(generated_response, AIMessage):
-            generated_response = AIMessage(content=str(getattr(generated_response, "content", "") or ""))
+        should_review_generated_answer = (
+            requires_workflow_graph_tools(context.user_prompt)
+            or any(isinstance(message, ToolMessage) for message in messages)
+        )
+        allow_stream_output = not should_review_generated_answer
+        stream_writer = None
+        if allow_stream_output:
+            try:
+                from langgraph.config import get_stream_writer
+
+                stream_writer = get_stream_writer()
+            except Exception:
+                stream_writer = None
+
+        streamed_response = None
+        async for chunk in llm.astream(llm_messages):
+            streamed_response = chunk if streamed_response is None else streamed_response + chunk
+            if stream_writer is None:
+                continue
+            delta_text = self._extract_text_from_stream_chunk(getattr(chunk, "content", ""))
+            if delta_text:
+                stream_writer({"event": "token", "text": delta_text})
+
+        if streamed_response is None:
+            generated_response = AIMessage(content="")
+        elif isinstance(streamed_response, AIMessage):
+            generated_response = streamed_response
+        else:
+            generated_response = AIMessage(
+                content=str(getattr(streamed_response, "content", "") or ""),
+                additional_kwargs=dict(getattr(streamed_response, "additional_kwargs", {}) or {}),
+                response_metadata=getattr(streamed_response, "response_metadata", {}) or {},
+                tool_calls=list(getattr(streamed_response, "tool_calls", []) or []),
+                id=getattr(streamed_response, "id", None),
+            )
+        generated_response = ensure_tool_call_ids(generated_response)
+
         answer_content, reasoning_content = llm_adapter.split_response_content(
             generated_response.content,
             additional_kwargs=generated_response.additional_kwargs,
@@ -273,10 +326,6 @@ class ChatAgent:
             )
 
         pending_review = False
-        should_review_generated_answer = (
-            requires_workflow_graph_tools(context.user_prompt)
-            or any(isinstance(message, ToolMessage) for message in messages)
-        )
         if not generated_response.tool_calls and should_review_generated_answer:
             # 只有“文本回答”才有 review 意义；工具调用消息由工具节点处理。
             additional_kwargs = dict(generated_response.additional_kwargs or {})
@@ -476,9 +525,7 @@ class ChatAgent:
         """
         构建 LangGraph：仅负责节点装配与路由连线。
 
-        这里刻意不写业务判断，业务逻辑全部下沉到各节点执行方法中。
-        这样可以让拓扑结构（图怎么流转）和节点行为（每步做什么）分离，
-        降低 `_build_app` 的认知负担。
+        这里不写业务判断，业务逻辑全部下沉到各节点执行方法中。
         """
         config_id = context.model_config_id
         if not config_id:
@@ -488,12 +535,13 @@ class ChatAgent:
         tools, _ = build_workflow_tools(context)
         logger.info("[初始化工具成功] 已加载工作流工具=%d", len(tools))
 
-        generate_node = partial(
-            self._run_generate_response_with_tool_context,
-            context=context,
-            config_id=config_id,
-            tools=tools,
-        )
+        async def generate_node(state: ChatState) -> Dict[str, Any]:
+            return await self._run_llm_answer(
+                state,
+                context=context,
+                config_id=config_id,
+                tools=tools,
+            )
         execute_tools_node = ToolNode(tools)
         review_node = partial(
             self._run_review_answer_sufficiency,
@@ -584,8 +632,26 @@ class ChatAgent:
         answer_parts: List[str] = []
         last_emitted = ""
 
-        async for update in app.astream(state, stream_mode="values"):
-            if not isinstance(update, dict):
+        async for stream_event in app.astream(state, stream_mode=["custom", "values"]):
+            mode = "values"
+            update = stream_event
+            if isinstance(stream_event, tuple) and len(stream_event) == 2:
+                mode, update = stream_event
+
+            if mode == "custom":
+                if not isinstance(update, dict):
+                    continue
+                if update.get("event") != "token":
+                    continue
+                delta = str(update.get("text") or "")
+                if not delta:
+                    continue
+                answer_parts.append(delta)
+                last_emitted = f"{last_emitted}{delta}"
+                yield delta
+                continue
+
+            if mode != "values" or not isinstance(update, dict):
                 continue
             messages = update.get("messages")
             if not isinstance(messages, list) or not messages:
