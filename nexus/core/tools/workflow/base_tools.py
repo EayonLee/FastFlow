@@ -164,7 +164,6 @@ class WorkflowGraphTools:
         )
         return result_json
 
-
 def build_workflow_base_tools(context: ChatRequestContext) -> Tuple[List, WorkflowGraphTools]:
     """
     工作流图工具：构建工具列表（Chat/Builder 都可复用）。

@@ -50,6 +50,8 @@ TOOL_KEYWORDS = {
     "get_workflow_node_info": ("节点详情", "节点信息", "某个节点", "node"),
     "get_toolset_tools": ("toolset", "工具集合", "工具清单", "mcp"),
     "get_tools_node_mcp_tools": ("tools 节点", "mcp", "挂载", "下挂", "工具"),
+    "get_current_time": ("当前时间", "现在时间", "几点", "日期", "时间", "format", "格式", "时区", "timezone"),
+    "get_current_timestamp": ("时间戳", "timestamp", "unix", "毫秒", "秒", "时区", "timezone"),
 }
 
 def _normalize_text(value: Any) -> str:

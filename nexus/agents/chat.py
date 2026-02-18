@@ -45,7 +45,7 @@ from nexus.core.prompts.chat_prompts import (
 from nexus.core.prompts.chat_message import build_need_user_input_message, build_review_guidance_message
 from nexus.core.schemas import ChatRequestContext
 from nexus.core.llm.tool_call_adapter import ensure_tool_call_ids
-from nexus.core.tools.workflow import build_workflow_tools
+from nexus.core.tools import build_time_tools, build_workflow_tools
 
 # 三段式流程：生成回答 -> 执行工具 -> 评审充足性。
 REVIEW_PENDING_ANSWER_FLAG = "review_pending_answer"
@@ -572,9 +572,16 @@ class ChatAgent:
         if not config_id:
             raise BusinessError("缺少模型配置 ID (model_config_id)")
 
-        # 构建工作流工具
-        tools, _ = build_workflow_tools(context)
-        logger.info("[初始化工具成功] 已加载工作流工具=%d", len(tools))
+        # 组合工具集
+        workflow_tools, _ = build_workflow_tools(context)
+        time_tools, _ = build_time_tools(context)
+        tools = [*workflow_tools, *time_tools]
+        logger.info(
+            "[初始化工具成功] 已加载工具总数=%d（workflow=%d,time=%d）",
+            len(tools),
+            len(workflow_tools),
+            len(time_tools),
+        )
 
         async def generate_node(state: ChatState) -> Dict[str, Any]:
             return await self._run_llm_answer(
