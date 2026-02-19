@@ -36,3 +36,6 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### Local Spring config (do not commit secrets) ###
+src/main/resources/application-dev.yml
