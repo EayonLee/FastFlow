@@ -21,11 +21,13 @@ const props = defineProps({
 })
 
 const localOpen = ref(true)
+const EMPTY_THINKING_HINT = '本轮未返回思考内容'
+const EMPTY_THINKING_DETAIL = '本轮未返回思考内容。'
 const hasContent = computed(() => !!String(props.content || '').trim())
 const shouldRender = computed(() => props.placeholder || hasContent.value)
 const liveLine = computed(() => {
   const merged = String(props.content || '').replace(/\s+/g, ' ').trim()
-  if (!merged) return props.completed ? '思考完成' : 'Deep Thinking...'
+  if (!merged) return props.completed ? EMPTY_THINKING_HINT : 'Deep Thinking...'
 
   const segments = merged
     .split(/[。！？!?；;\n]/)
@@ -48,7 +50,7 @@ const liveLineKey = computed(() => {
 })
 const fullThinkingText = computed(() => {
   if (hasContent.value) return props.content
-  return props.completed ? '异常：本轮未收到思考内容，请检查模型是否开启思考输出。' : 'Deep Thinking...'
+  return props.completed ? EMPTY_THINKING_DETAIL : 'Deep Thinking...'
 })
 watch(
   () => props.open,
@@ -74,7 +76,8 @@ function handleToggle(event) {
     <summary class="thinking-summary">
       <span class="thinking-title">思考过程</span>
       <div class="thinking-collapsed-line">
-        <span v-if="!localOpen && completed" class="thinking-collapsed-hint">点击展开查看完整内容</span>
+        <span v-if="!localOpen && completed && hasContent" class="thinking-collapsed-hint">点击展开查看完整内容</span>
+        <span v-else-if="!localOpen && completed && !hasContent" class="thinking-collapsed-hint">{{ EMPTY_THINKING_HINT }}</span>
         <span v-else-if="localOpen" class="thinking-collapsed-empty"></span>
         <transition v-else name="thinking-line-slide" mode="out-in">
           <span :key="liveLineKey" class="thinking-collapsed-text">{{ liveLine }}</span>

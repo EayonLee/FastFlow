@@ -20,6 +20,16 @@ class LiteLLMAdapter:
         return "litellm"
 
     @staticmethod
+    def _parse_bool_setting(raw_setting: Any) -> bool:
+        if isinstance(raw_setting, bool):
+            return raw_setting
+        if isinstance(raw_setting, (int, float)):
+            return raw_setting != 0
+        if isinstance(raw_setting, str):
+            return raw_setting.strip().lower() in {"1", "true", "yes", "on"}
+        return False
+
+    @staticmethod
     def _parse_think_wrapped_content(content: Any) -> Tuple[str, str]:
         text = str(content or "")
         lower_text = text.lower()
@@ -47,7 +57,7 @@ class LiteLLMAdapter:
 
     def _is_thinking_enabled(self, model_config: ModelConfig) -> bool:
         raw_setting = model_config.model_params.get("enable_thinking")
-        return raw_setting is True
+        return self._parse_bool_setting(raw_setting)
 
     def build_chat_model(self, model_config: ModelConfig) -> ChatLiteLLM:
         model_kwargs: Dict[str, Any] = dict(model_config.model_params or {})
