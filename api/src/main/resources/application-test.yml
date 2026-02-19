@@ -1,0 +1,15 @@
+spring:
+  config:
+    activate:
+      on-profile: test
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${TEST_DB_URL:jdbc:mysql://127.0.0.1:3306/fastflow_test?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai}
+    username: ${TEST_DB_USERNAME:root}
+    password: ${TEST_DB_PASSWORD:}
+
+auth:
+  jwt:
+    secret: ${TEST_AUTH_JWT_SECRET:test-jwt-secret-change-me}
+  password:
+    secret-key: ${TEST_AUTH_PASSWORD_SECRET_KEY:test-aes-key-change-me}

@@ -1,0 +1,15 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${PROD_DB_URL}
+    username: ${PROD_DB_USERNAME}
+    password: ${PROD_DB_PASSWORD}
+
+auth:
+  jwt:
+    secret: ${PROD_AUTH_JWT_SECRET}
+  password:
+    secret-key: ${PROD_AUTH_PASSWORD_SECRET_KEY}
