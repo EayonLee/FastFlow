@@ -3,10 +3,13 @@ package com.fastflow.common.exception;
 import com.fastflow.common.result.RestfulResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.BindingResult;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 
@@ -31,7 +34,9 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(BusinessException.class)
     public RestfulResult handleBusinessException(BusinessException e) {
-//        log.error(e.getMessage(), e);
+        if (e.getFieldErrors() != null && !e.getFieldErrors().isEmpty()) {
+            return RestfulResult.error(e.getCode(), e.getMessage(), Map.of("fieldErrors", e.getFieldErrors()));
+        }
         return RestfulResult.error(e.getCode(), e.getMessage());
     }
 
@@ -48,8 +53,12 @@ public class GlobalExceptionHandler {
         String message = bindingResult.getAllErrors().stream()
                 .map(error -> error.getDefaultMessage())
                 .collect(Collectors.joining("; "));
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
+        for (FieldError fieldError : bindingResult.getFieldErrors()) {
+            fieldErrors.putIfAbsent(fieldError.getField(), fieldError.getDefaultMessage());
+        }
         log.warn("Parameter validation error: {}", message);
-        return RestfulResult.error(400, message);
+        return RestfulResult.error(400, message, Map.of("fieldErrors", fieldErrors));
     }
 
 

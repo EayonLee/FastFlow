@@ -789,7 +789,6 @@
 }
 
 #fastflow-copilot-container .copy-btn {
-    margin-left: 4px;
     width: 20px;
     height: 20px;
     padding: 0;
@@ -809,9 +808,22 @@
     opacity: 1;
 }
 
+#fastflow-copilot-container .msg-body:hover .copy-btn-bubble {
+    opacity: 1;
+}
+
 #fastflow-copilot-container .copy-btn:hover {
     border-color: var(--accent-neon);
     background: transparent;
+}
+
+#fastflow-copilot-container .copy-btn-bubble {
+    position: absolute;
+    right: -8px;
+    bottom: -8px;
+    border-color: var(--border-subtle);
+    background: color-mix(in srgb, var(--bg-panel) 84%, transparent);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
 }
 
 /* Input Area */
@@ -843,19 +855,308 @@
     box-shadow: 0 0 0 1px rgba(0, 255, 65, 0.3), 0 0 15px rgba(0, 255, 65, 0.1);
 }
 
-textarea#fastflow-input {
-    background: transparent;
-    border: none;
-    color: var(--text-primary);
-    resize: none;
+#fastflow-copilot-container .skill-composer {
+    position: relative;
+}
+
+#fastflow-copilot-container .skill-composer-editor {
+    min-height: 66px;
+    max-height: 180px;
+    overflow-y: auto;
     outline: none;
+    border: 0;
+    color: var(--text-primary);
     font-family: var(--font-ui);
     font-size: 14px;
     line-height: 1.5;
-    width: 100%;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
-textarea#fastflow-input::placeholder {
+
+#fastflow-copilot-container .skill-composer-editor p {
+    margin: 0;
+}
+
+#fastflow-copilot-container .skill-composer-editor .is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
     color: var(--text-dim);
+    pointer-events: none;
+    float: left;
+    height: 0;
+}
+
+#fastflow-copilot-container .composer-skill-chip,
+#fastflow-copilot-container .msg-skill-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    margin: 0 2px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--skill-chip-border);
+    background: var(--skill-chip-bg);
+    color: var(--skill-chip-text);
+    box-shadow: var(--skill-chip-shadow);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.45;
+    white-space: nowrap;
+    vertical-align: baseline;
+}
+
+#fastflow-copilot-container .composer-node-chip,
+#fastflow-copilot-container .msg-node-chip {
+    display: inline-block;
+    max-width: 100%;
+    margin: 0 2px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--node-chip-border);
+    background: var(--node-chip-bg);
+    color: var(--node-chip-text);
+    box-shadow: var(--node-chip-shadow);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.45;
+    white-space: normal;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    vertical-align: baseline;
+}
+
+#fastflow-copilot-container .skill-slash-panel {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    box-sizing: border-box;
+    bottom: calc(100% + 1px);
+    z-index: 40;
+    max-height: 240px;
+    overflow-y: auto;
+    border-radius: 10px;
+    border: 1px solid var(--slash-panel-border);
+    background: var(--slash-panel-bg);
+    box-shadow: var(--slash-panel-shadow);
+}
+
+#fastflow-copilot-container .skill-slash-hint {
+    margin: 8px 10px 2px;
+    padding: 6px 8px;
+    border: 1px solid var(--slash-hint-border);
+    border-radius: 8px;
+    background: var(--slash-hint-bg);
+    color: var(--slash-hint-text);
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+#fastflow-copilot-container .skill-slash-section {
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
+#fastflow-copilot-container .skill-slash-divider {
+    margin: 2px 10px;
+    border-top: 1px solid var(--slash-divider);
+}
+
+#fastflow-copilot-container .skill-slash-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px 6px;
+    background: var(--slash-header-bg);
+}
+
+#fastflow-copilot-container .skill-slash-header-title {
+    position: relative;
+    padding-left: 10px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+#fastflow-copilot-container .skills-section .skill-slash-header-title {
+    color: var(--slash-skills-header-title);
+}
+
+#fastflow-copilot-container .mcp-section .skill-slash-header-title {
+    color: var(--slash-mcp-header-title);
+}
+
+#fastflow-copilot-container .nodes-section .skill-slash-header-title {
+    color: var(--slash-nodes-header-title);
+}
+
+#fastflow-copilot-container .skill-slash-header-title::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    transform: translateY(-50%);
+}
+
+#fastflow-copilot-container .skills-section .skill-slash-header-title::before {
+    background: var(--slash-skills-header-dot);
+    box-shadow: var(--slash-skills-header-dot-glow);
+}
+
+#fastflow-copilot-container .mcp-section .skill-slash-header-title::before {
+    background: var(--slash-mcp-header-dot);
+    box-shadow: var(--slash-mcp-header-dot-glow);
+}
+
+#fastflow-copilot-container .nodes-section .skill-slash-header-title::before {
+    background: var(--slash-nodes-header-dot);
+    box-shadow: var(--slash-nodes-header-dot-glow);
+}
+
+#fastflow-copilot-container .skill-slash-header-badge {
+    flex: 0 0 auto;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+}
+
+#fastflow-copilot-container .skills-section .skill-slash-header-badge {
+    border: 1px solid var(--slash-skills-badge-border);
+    background: var(--slash-skills-badge-bg);
+    color: var(--slash-skills-badge-text);
+}
+
+#fastflow-copilot-container .mcp-section .skill-slash-header-badge {
+    border: 1px solid var(--slash-mcp-badge-border);
+    background: var(--slash-mcp-badge-bg);
+    color: var(--slash-mcp-badge-text);
+}
+
+#fastflow-copilot-container .nodes-section .skill-slash-header-badge {
+    border: 1px solid var(--slash-nodes-badge-border);
+    background: var(--slash-nodes-badge-bg);
+    color: var(--slash-nodes-badge-text);
+}
+
+#fastflow-copilot-container .skill-slash-empty {
+    padding: 10px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+#fastflow-copilot-container .skill-slash-item {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    text-align: left;
+    padding: 8px 10px;
+    display: block;
+    cursor: pointer;
+}
+
+#fastflow-copilot-container .skill-slash-item.active,
+#fastflow-copilot-container .skill-slash-item:hover {
+    background: var(--slash-item-hover-bg);
+}
+
+#fastflow-copilot-container .nodes-section .skill-slash-item.active,
+#fastflow-copilot-container .nodes-section .skill-slash-item:hover {
+    background: var(--slash-node-item-hover-bg);
+}
+
+#fastflow-copilot-container .skill-slash-item.is-disabled,
+#fastflow-copilot-container .skill-slash-item.is-disabled:hover {
+    cursor: not-allowed;
+    background: transparent;
+    opacity: var(--slash-item-disabled-opacity);
+}
+
+#fastflow-copilot-container .skill-slash-item.is-placeholder {
+    padding-top: 9px;
+    padding-bottom: 9px;
+}
+
+#fastflow-copilot-container .skill-slash-item-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+}
+
+#fastflow-copilot-container .skill-slash-item-name {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--slash-item-name);
+    flex: 0 0 auto;
+    max-width: 46%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#fastflow-copilot-container .skill-slash-item-desc {
+    font-size: 12px;
+    color: var(--slash-item-desc);
+    line-height: 1.4;
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: right;
+}
+
+#fastflow-copilot-container .skill-slash-item-desc.only {
+    text-align: left;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    color: var(--slash-item-placeholder);
+}
+
+#fastflow-copilot-container .nodes-section .skill-slash-item-name {
+    color: var(--slash-node-item-name);
+    max-width: none;
+    flex: 0 0 auto;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-word;
+}
+
+#fastflow-copilot-container .nodes-section .skill-slash-item-desc {
+    color: var(--slash-node-item-desc);
+    flex: 0 0 auto;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-all;
+    text-align: right;
+    margin-left: auto;
+}
+
+#fastflow-copilot-container .nodes-section .skill-slash-item-desc.node-id {
+    font-family: var(--font-mono);
+}
+
+#fastflow-copilot-container .nodes-section .skill-slash-item-line {
+    display: grid;
+    grid-template-columns: minmax(120px, 38%) minmax(0, 62%);
+    align-items: start;
+    column-gap: 8px;
+}
+
+#fastflow-copilot-container .user-protocol-body {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
 }
 
 .input-footer {
@@ -870,6 +1171,34 @@ textarea#fastflow-input::placeholder {
     align-items: center;
     gap: 8px;
     padding-left: 2px; /* 左侧控制栏增加内边距 */
+}
+
+#fastflow-copilot-container .slash-trigger-btn {
+    min-width: 30px;
+    height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--bg-surface);
+    color: var(--slash-trigger-text, #6b7280);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+#fastflow-copilot-container .slash-trigger-btn:hover:not(:disabled) {
+    border-color: var(--accent-neon);
+    background: var(--bg-panel);
+    color: var(--slash-trigger-text, #6b7280);
+    box-shadow: 0 0 10px var(--accent-neon-dim);
+}
+
+#fastflow-copilot-container .slash-trigger-btn:disabled {
+    opacity: 0.52;
+    cursor: not-allowed;
 }
 
 /* Typing Indicator */

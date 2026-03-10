@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 const props = defineProps({
   content: {
@@ -14,6 +14,10 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  runtimeStatus: {
+    type: String,
+    default: 'running'
+  },
   placeholder: {
     type: Boolean,
     default: false
@@ -23,11 +27,20 @@ const props = defineProps({
 const localOpen = ref(true)
 const EMPTY_THINKING_HINT = '本轮未返回思考内容'
 const EMPTY_THINKING_DETAIL = '本轮未返回思考内容。'
+const FAILED_THINKING_HINT = '思考中断：请求失败'
+const FAILED_THINKING_DETAIL = '思考中断：本次请求失败，请重试或检查模型配置/网络。'
+const dotStep = ref(1)
+let dotTimer = null
+const isFailed = computed(() => props.runtimeStatus === 'failed')
+const animatedThinkingText = computed(() => `Deep Thinking ${'.'.repeat(dotStep.value)}`)
 const hasContent = computed(() => !!String(props.content || '').trim())
 const shouldRender = computed(() => props.placeholder || hasContent.value)
 const liveLine = computed(() => {
   const merged = String(props.content || '').replace(/\s+/g, ' ').trim()
-  if (!merged) return props.completed ? EMPTY_THINKING_HINT : 'Deep Thinking...'
+  if (!merged) {
+    if (isFailed.value) return FAILED_THINKING_HINT
+    return props.completed ? EMPTY_THINKING_HINT : animatedThinkingText.value
+  }
 
   const segments = merged
     .split(/[。！？!?；;\n]/)
@@ -37,20 +50,10 @@ const liveLine = computed(() => {
   if (latest.length <= 72) return latest
   return latest.slice(-72)
 })
-const liveLineKey = computed(() => {
-  if (props.completed) return 'completed'
-  const merged = String(props.content || '').replace(/\s+/g, ' ').trim()
-  if (!merged) return '0'
-  const sentenceCount = merged
-    .split(/[。！？!?；;\n]/)
-    .map((item) => item.trim())
-    .filter(Boolean).length
-  const lengthBucket = Math.floor(merged.length / 24)
-  return `${sentenceCount}-${lengthBucket}`
-})
 const fullThinkingText = computed(() => {
   if (hasContent.value) return props.content
-  return props.completed ? EMPTY_THINKING_DETAIL : 'Deep Thinking...'
+  if (isFailed.value) return FAILED_THINKING_DETAIL
+  return props.completed ? EMPTY_THINKING_DETAIL : animatedThinkingText.value
 })
 watch(
   () => props.open,
@@ -63,6 +66,32 @@ watch(
 function handleToggle(event) {
   localOpen.value = !!event?.target?.open
 }
+
+watch(
+  () => [isFailed.value, props.completed],
+  ([failed, completed]) => {
+    if (failed || completed) {
+      if (dotTimer) {
+        clearInterval(dotTimer)
+        dotTimer = null
+      }
+      return
+    }
+    if (!dotTimer) {
+      dotTimer = setInterval(() => {
+        dotStep.value = dotStep.value >= 3 ? 1 : dotStep.value + 1
+      }, 420)
+    }
+  },
+  { immediate: true }
+)
+
+onBeforeUnmount(() => {
+  if (dotTimer) {
+    clearInterval(dotTimer)
+    dotTimer = null
+  }
+})
 </script>
 
 <template>
@@ -79,9 +108,7 @@ function handleToggle(event) {
         <span v-if="!localOpen && completed && hasContent" class="thinking-collapsed-hint">点击展开查看完整内容</span>
         <span v-else-if="!localOpen && completed && !hasContent" class="thinking-collapsed-hint">{{ EMPTY_THINKING_HINT }}</span>
         <span v-else-if="localOpen" class="thinking-collapsed-empty"></span>
-        <transition v-else name="thinking-line-slide" mode="out-in">
-          <span :key="liveLineKey" class="thinking-collapsed-text">{{ liveLine }}</span>
-        </transition>
+        <span v-else class="thinking-collapsed-text">{{ liveLine }}</span>
       </div>
     </summary>
     <div class="thinking-body">

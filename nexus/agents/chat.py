@@ -7,10 +7,10 @@ from typing import Annotated, Any, AsyncGenerator, Dict, List, Literal, TypedDic
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field, field_validator
 
 from nexus.common.exceptions import BusinessError
+from nexus.config.config import get_config
 from nexus.config.logger import get_logger
 from nexus.core.event import (
     PHASE_ANALYZE_QUESTION,
@@ -30,7 +30,11 @@ from nexus.core.event import (
     is_tool_execution_failed,
 )
 from nexus.core.llm import get_llm
-from nexus.core.memory.memory_manager import get_session_history
+from nexus.core.llm.response_normalizer import (
+    normalize_answer_and_reasoning,
+    normalize_structured_json,
+)
+from nexus.core.history.manager import get_session_history
 from nexus.core.policies import (
     MAX_TOOL_CALLS_PER_QUESTION,
     get_tool_message_count,
@@ -45,13 +49,14 @@ from nexus.core.prompts.chat_prompts import (
 from nexus.core.prompts.chat_message import build_need_user_input_message, build_review_guidance_message
 from nexus.core.schemas import ChatRequestContext
 from nexus.core.llm.tool_call_adapter import ensure_tool_call_ids
-from nexus.core.tools import build_time_tools, build_workflow_tools
+from nexus.core.tools import build_skill_tools, build_time_tools, build_workflow_tools
+from nexus.core.tools.tool_manager import ToolExecutionManager
 
 # 三段式流程：生成回答 -> 执行工具 -> 评审充足性。
 REVIEW_PENDING_ANSWER_FLAG = "review_pending_answer"
 # 单个用户问题在“回答充足性复核”节点最多允许回环的次数。
 # 这是复核流程上限，不等于工具调用上限；用于防止复核无法收敛时死循环。
-MAX_ANSWER_SUFFICIENCY_REVIEW_ROUNDS = 3
+MAX_ANSWER_SUFFICIENCY_REVIEW_ROUNDS = max(1, int(get_config().CHAT_ANSWER_SUFFICIENCY_MAX_REVIEW_ROUNDS))
 
 NODE_GENERATE_RESPONSE_WITH_TOOL_CONTEXT = "generate_response_with_tool_context"
 NODE_EXECUTE_MODEL_REQUESTED_TOOLS = "execute_model_requested_tools"
@@ -185,7 +190,7 @@ class ChatAgent:
         关键点：
         - tool_results 只采集 ToolMessage，确保 review 聚焦“可验证证据”
         - candidate_tools 只放候选工具摘要，避免无关工具干扰决策
-        - 同时携带工具预算信息，避免 review 在预算耗尽时仍要求继续调用
+        - 同时携带工具调用安全上限信息，避免 review 在熔断后仍要求继续调用
         """
         # 收集“已执行工具”的结果，review 仅基于这些可追溯证据判断是否足够回答。
         tool_results = []
@@ -218,7 +223,7 @@ class ChatAgent:
             for tool in review_tool_candidates
         ]
 
-        # 预算字段会直接喂给 review 模型，避免“预算已耗尽却继续建议调工具”。
+        # 这些字段会直接喂给 review 模型，避免“已触发安全上限却继续建议调工具”。
         used_tool_calls = get_tool_message_count(messages)
         remaining_tool_calls = max(0, MAX_TOOL_CALLS_PER_QUESTION - used_tool_calls)
         return {
@@ -263,9 +268,6 @@ class ChatAgent:
         candidate_tools = self._filter_unused_tools(messages, candidate_tools)
 
         tool_choice = resolve_tool_choice(context, messages)
-        # 预算耗尽后，直接关闭工具调用入口，避免无意义循环。
-        if get_tool_message_count(messages) >= MAX_TOOL_CALLS_PER_QUESTION:
-            tool_choice = "none"
         if force_tool_call and tool_choice != "none":
             tool_choice = "required"
         logger.info(
@@ -275,7 +277,7 @@ class ChatAgent:
         )
 
         # 将候选工具与 tool_choice 一并绑定到当前 LLM 调用。
-        llm, llm_adapter = get_llm(
+        llm, _, model_id = get_llm(
             config_id,
             context.auth_token,
             candidate_tools,
@@ -329,9 +331,10 @@ class ChatAgent:
             )
         generated_response = ensure_tool_call_ids(generated_response)
 
-        answer_content, reasoning_content = llm_adapter.split_response_content(
+        answer_content, reasoning_content = normalize_answer_and_reasoning(
             generated_response.content,
-            additional_kwargs=generated_response.additional_kwargs,
+            generated_response.additional_kwargs,
+            model_id=model_id,
         )
         additional_kwargs = dict(generated_response.additional_kwargs or {})
         if reasoning_content:
@@ -443,31 +446,51 @@ class ChatAgent:
         )
 
         try:
-            # 使用结构化输出
-            review_llm, _ = get_llm(config_id, context.auth_token)
-            review_llm = review_llm.with_structured_output(AnswerSufficiencyReviewResult)
+            # review 改为“原始返回 -> 标准化解析 -> Pydantic 校验”链路。
+            # 不依赖模型是否严格输出 JSON，可兼容 `<think> + JSON` 混合内容。
+            review_llm, _, model_id = get_llm(config_id, context.auth_token)
             raw_review_result = review_llm.invoke(
                 [
                     SystemMessage(content=CHAT_ANSWER_SUFFICIENCY_REVIEW_PROMPT),
                     HumanMessage(content=json.dumps(review_payload, ensure_ascii=False)),
                 ]
             )
-            if isinstance(raw_review_result, AnswerSufficiencyReviewResult):
-                review_result_model = raw_review_result
+            if isinstance(raw_review_result, AIMessage):
+                normalized_result = normalize_structured_json(
+                    raw_review_result.content,
+                    raw_review_result.additional_kwargs,
+                    model_id=model_id,
+                )
+                logger.info(
+                    "[回答充足性复核] 控制面解析成功 source=%s had_reasoning=%s review_round=%d",
+                    normalized_result.source,
+                    str(normalized_result.had_reasoning).lower(),
+                    review_count,
+                )
+                review_result_model = AnswerSufficiencyReviewResult.model_validate(normalized_result.payload)
             elif isinstance(raw_review_result, dict):
                 review_result_model = AnswerSufficiencyReviewResult.model_validate(raw_review_result)
             else:
-                raise ValueError("invalid review result type")
-        except Exception:  # noqa: BLE001
+                normalized_result = normalize_structured_json(
+                    str(raw_review_result or ""),
+                    None,
+                    model_id=model_id,
+                )
+                logger.info(
+                    "[回答充足性复核] 控制面解析成功 source=%s had_reasoning=%s review_round=%d",
+                    normalized_result.source,
+                    str(normalized_result.had_reasoning).lower(),
+                    review_count,
+                )
+                review_result_model = AnswerSufficiencyReviewResult.model_validate(normalized_result.payload)
+        except Exception as error:  # noqa: BLE001
+            # 系统异常与“用户信息不足”是两类语义，不能混用。
+            # review 调用/解析失败时必须抛错，让上层统一输出 SSE error。
             logger.exception(
-                "对话执行.ChatAgent._run_review_answer_sufficiency.调用复核模型失败 "
-                "review_round=%d",
+                "[回答充足性复核] 控制面调用失败，已中止本轮 review_round=%d",
                 review_count,
             )
-            review_result_model = AnswerSufficiencyReviewResult(
-                status="need_user_input",
-                user_guidance="",
-            )
+            raise BusinessError("回答充足性复核失败，请稍后重试") from error
 
         review_result = review_result_model.model_dump()
         review_status = review_result_model.status
@@ -574,12 +597,14 @@ class ChatAgent:
 
         # 组合工具集
         workflow_tools, _ = build_workflow_tools(context)
+        skill_tools, _ = build_skill_tools(context)
         time_tools, _ = build_time_tools(context)
-        tools = [*workflow_tools, *time_tools]
+        tools = [*workflow_tools, *skill_tools, *time_tools]
         logger.info(
-            "[初始化工具成功] 已加载工具总数=%d（workflow=%d,time=%d）",
+            "[初始化工具成功] 已加载工具总数=%d（workflow=%d,skill=%d,time=%d）",
             len(tools),
             len(workflow_tools),
+            len(skill_tools),
             len(time_tools),
         )
 
@@ -590,7 +615,9 @@ class ChatAgent:
                 config_id=config_id,
                 tools=tools,
             )
-        execute_tools_node = ToolNode(tools)
+        # 工具执行细节下沉到通用管理器，ChatAgent 这里只保留图编排职责。
+        tool_manager = ToolExecutionManager(tools)
+
         review_node = partial(
             self._run_review_answer_sufficiency,
             context=context,
@@ -602,9 +629,9 @@ class ChatAgent:
         # 某些类型检查器会对 TypedDict + 泛型推断误报，这里显式忽略静态告警，不影响运行时类型安全。
         workflow = StateGraph(ChatState)  # type: ignore[arg-type]
         # 注册三个执行节点：生成回答 -> 执行工具 -> 复核回答。
-        # 这里的工具执行节点使用 LangGraph 官方 ToolNode，避免手写工具调度细节。
+        # 工具执行节点由通用管理器托管：内部仍复用 ToolNode，但去重等执行保护不再堆在 ChatAgent 中。
         workflow.add_node(NODE_GENERATE_RESPONSE_WITH_TOOL_CONTEXT, generate_node)
-        workflow.add_node(NODE_EXECUTE_MODEL_REQUESTED_TOOLS, execute_tools_node)
+        workflow.add_node(NODE_EXECUTE_MODEL_REQUESTED_TOOLS, tool_manager.build_execution_node())
         workflow.add_node(NODE_REVIEW_ANSWER_SUFFICIENCY, review_node)
 
         # 入口固定为“生成回答”节点，所有流程都从模型首轮决策开始。

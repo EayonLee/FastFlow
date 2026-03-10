@@ -19,6 +19,7 @@ public enum ErrorCode {
     USER_PASSWORD_ERROR(10004, "用户名或密码错误"),
     USER_ACCOUNT_LOCKED(10005, "账号已被封禁"),
     USER_EMAIL_ALREADY_EXISTS(10006, "该邮箱已被注册"),
+    USER_INVITE_CODE_INVALID(10007, "邀请码错误"),
     ;
 
     private final int code;

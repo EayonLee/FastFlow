@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from langchain_core.tools import tool
 
-from nexus.config.logger import get_logger
+from nexus.config.logger import get_logger, log_tool_failure, log_tool_success
 from nexus.core.schemas import ChatRequestContext
 
 logger = get_logger(__name__)
@@ -102,7 +102,12 @@ class TimeTools:
                 },
                 ensure_ascii=False,
             )
-            logger.info("[执行工具失败] tool=get_current_time result=%s", error_result_json)
+            log_tool_failure(
+                logger,
+                "get_current_time",
+                error=f"invalid timezone: {normalized_timezone}",
+                timezone=normalized_timezone,
+            )
             return error_result_json
 
         normalized_format = (format or "").strip() or DEFAULT_TIME_FORMAT
@@ -117,7 +122,13 @@ class TimeTools:
                 },
                 ensure_ascii=False,
             )
-            logger.info("[执行工具失败] tool=get_current_time result=%s", error_result_json)
+            log_tool_failure(
+                logger,
+                "get_current_time",
+                error=f"invalid datetime format: {normalized_format}",
+                format=normalized_format,
+                detail=str(error),
+            )
             return error_result_json
 
         result_json = json.dumps(
@@ -132,7 +143,13 @@ class TimeTools:
             },
             ensure_ascii=False,
         )
-        logger.info("[执行工具成功] tool=get_current_time result=%s", result_json)
+        log_tool_success(
+            logger,
+            "get_current_time",
+            timezone=normalized_timezone,
+            format=normalized_format,
+            weekday_cn=WEEKDAY_CN[now.isoweekday() - 1],
+        )
         return result_json
 
     def get_current_timestamp(self, timezone: str = DEFAULT_TIMEZONE) -> str:
@@ -150,7 +167,12 @@ class TimeTools:
                 },
                 ensure_ascii=False,
             )
-            logger.info("[执行工具失败] tool=get_current_timestamp result=%s", error_result_json)
+            log_tool_failure(
+                logger,
+                "get_current_timestamp",
+                error=f"invalid timezone: {normalized_timezone}",
+                timezone=normalized_timezone,
+            )
             return error_result_json
 
         timestamp_seconds = int(now.timestamp())
@@ -166,7 +188,12 @@ class TimeTools:
             },
             ensure_ascii=False,
         )
-        logger.info("[执行工具成功] tool=get_current_timestamp result=%s", result_json)
+        log_tool_success(
+            logger,
+            "get_current_timestamp",
+            timezone=normalized_timezone,
+            weekday_cn=WEEKDAY_CN[now.isoweekday() - 1],
+        )
         return result_json
 
 

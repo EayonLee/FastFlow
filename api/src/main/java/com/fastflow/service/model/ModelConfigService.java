@@ -1,4 +1,4 @@
-package com.fastflow.service;
+package com.fastflow.service.model;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;

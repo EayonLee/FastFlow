@@ -5,7 +5,7 @@ import com.fastflow.common.annotation.LoginCheck;
 import com.fastflow.common.exception.BusinessException;
 import com.fastflow.common.exception.ErrorCode;
 import com.fastflow.entity.user.UserInfo;
-import com.fastflow.service.AuthService;
+import com.fastflow.service.user.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;

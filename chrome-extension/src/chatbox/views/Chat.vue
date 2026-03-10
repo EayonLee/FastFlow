@@ -7,6 +7,7 @@ import MermaidViewer from '@/chatbox/components/MermaidViewer.vue'
 import AgentExecutionTimeline from '@/chatbox/components/AgentExecutionTimeline.vue'
 import AgentAnswerContent from '@/chatbox/components/AgentAnswerContent.vue'
 import AgentThinkingPanel from '@/chatbox/components/AgentThinkingPanel.vue'
+import ProtocolComposer from '@/chatbox/components/ProtocolComposer.vue'
 import { useCopyFeedback } from '@/composables/useCopyFeedback.js'
 import { useResizable } from '@/composables/useResizable.js'
 import { useStreamTypewriter } from '@/composables/useStreamTypewriter.js'
@@ -20,6 +21,7 @@ import { renderMarkdown } from '@/utils/markdown.js'
 import { getMermaidSourceByKey, renderMermaidInElement, renderMermaidSource } from '@/utils/mermaid.js'
 import { generateUuid32 } from '@/utils/uuid.js'
 import { useMermaidThemeSync } from '@/chatbox/composables/useMermaidThemeSync.js'
+import { splitProtocolText } from '@/chatbox/protocols/parser.js'
 import { themeManager } from '@/utils/themeManager.js'
 
 // 存储 key（用于记住聊天框尺寸）
@@ -28,10 +30,6 @@ const CHAT_SIZE_STORAGE_KEY = 'chat_box_size'
 const WELCOME_MESSAGE = 'Hi！👋\n' +
     '我是 Nexus，FastFlow 工作流智能助手，可以随时帮你优化或讲解工作流。\n\n' +
     '😎需要我帮你做什么？'
-// 输入框行数约束
-const MIN_INPUT_ROWS = 3
-const MAX_INPUT_ROWS = 6
-
 /**
  * 聊天视图组件
  * 作用：处理与用户的聊天交互、工作流生成和渲染请求。
@@ -43,10 +41,8 @@ const MAX_INPUT_ROWS = 6
 
 // 聊天窗口展开状态
 const isOpen = ref(false)
-// 输入框内容
-const inputValue = ref('')
-// 输入框行数（默认 3 行，最多 6 行）
-const inputRows = ref(MIN_INPUT_ROWS)
+// 输入框序列化后的用户文本（包含 selected_skill(...) / selected_node(...) 协议）
+const composerPrompt = ref('')
 // 登录状态（未登录时隐藏小球和聊天框）
 const isAuthed = ref(false)
 let authGuard = null
@@ -80,8 +76,8 @@ const { copiedMap, copyText } = useCopyFeedback()
 const isLoading = ref(false)
 // 消息容器 DOM 引用，用于滚动到末尾
 const messagesContainer = ref(null)
-// 输入框 DOM 引用，用于展开时自动聚焦
-const inputRef = ref(null)
+// 输入组件引用（用于聚焦/清空）
+const protocolComposerRef = ref(null)
 // 聊天容器 DOM 引用，用于拖拽调整尺寸
 const containerRef = ref(null)
 
@@ -151,6 +147,9 @@ function markRuntimeCompleted(messageId) {
   if (!messageId) return
   updateMessage(messageId, (target) => {
     target.runtimeCompleted = true
+    if (target.runtimeStatus !== 'failed') {
+      target.runtimeStatus = 'completed'
+    }
   })
 }
 
@@ -165,7 +164,8 @@ function createMessage(content, type, extra = {}) {
     thinkingContent: type === 'ai' ? '' : undefined,
     executionPanelOpen: type === 'ai' ? false : undefined,
     thinkingPanelOpen: type === 'ai' ? false : undefined,
-    runtimeCompleted: type === 'ai' ? false : undefined
+    runtimeCompleted: type === 'ai' ? false : undefined,
+    runtimeStatus: type === 'ai' ? 'running' : undefined
   }
   return { ...base, ...extra }
 }
@@ -190,6 +190,8 @@ function setMessageError(id, message) {
   updateMessage(id, (target) => {
     target.isLoading = false
     target.content = message
+    target.runtimeCompleted = true
+    target.runtimeStatus = 'failed'
   })
   scrollToBottom()
 }
@@ -318,7 +320,7 @@ function toggleChat() {
     // 展开时滚动到底部并聚焦输入框
     nextTick(() => {
       scrollToBottom()
-      inputRef.value?.focus()
+      protocolComposerRef.value?.focusEditor?.()
     })
   }
 }
@@ -326,16 +328,6 @@ function toggleChat() {
 // 关闭聊天窗口
 function closeChat() {
   isOpen.value = false
-}
-
-// 计算输入框行数（默认 3 行，最多 6 行）
-function updateInputRows() {
-  const value = inputValue.value || ''
-  const lineCount = value.split('\n').length
-  const nextRows = Math.max(MIN_INPUT_ROWS, Math.min(MAX_INPUT_ROWS, lineCount))
-  if (inputRows.value !== nextRows) {
-    inputRows.value = nextRows
-  }
 }
 
 // 滚动到底部
@@ -386,8 +378,8 @@ function handleMessagesClick(e) {
 }
 
 // 添加消息辅助函数
-function addMessage(content, type) {
-  messages.value.push(createMessage(content, type))
+function addMessage(content, type, extra = {}) {
+  messages.value.push(createMessage(content, type, extra))
   scrollToBottom()
 }
 
@@ -401,6 +393,13 @@ function renderMessageContent(content) {
   return renderMarkdown(content || '')
 }
 
+function renderUserMessageSegments(message) {
+  if (Array.isArray(message?.displaySegments) && message.displaySegments.length > 0) {
+    return message.displaySegments
+  }
+  return splitProtocolText(message?.content || '')
+}
+
 function shouldShowRuntimePanels(message) {
   if (!message || message.type !== 'ai') return false
   if (message.isLoading) return true
@@ -409,10 +408,36 @@ function shouldShowRuntimePanels(message) {
   return !!String(message.thinkingContent || '').trim()
 }
 
+function handleSlashTrigger() {
+  protocolComposerRef.value?.triggerSlashFromButton?.()
+}
+
+function handleHashTrigger() {
+  protocolComposerRef.value?.triggerHashFromButton?.()
+}
+
+function getComposerSnapshot() {
+  const snapshot = protocolComposerRef.value?.buildSnapshot?.()
+  if (snapshot && typeof snapshot === 'object') {
+    const prompt = String(snapshot.prompt || '')
+    const displaySegments = Array.isArray(snapshot.displaySegments)
+      ? snapshot.displaySegments
+      : splitProtocolText(prompt)
+    return { prompt, displaySegments }
+  }
+  const prompt = String(composerPrompt.value || '')
+  return {
+    prompt,
+    displaySegments: splitProtocolText(prompt),
+  }
+}
+
 // 发送消息处理逻辑
 async function handleGenerate() {
+  if (isLoading.value) return
   // 1) 校验输入
-  const prompt = inputValue.value.trim()
+  const snapshot = getComposerSnapshot()
+  const prompt = snapshot.prompt.trim()
   if (!prompt) return
   // 2) 校验模型配置
   if (!selectedModel.value) {
@@ -421,9 +446,12 @@ async function handleGenerate() {
   }
 
   // 3) 添加用户消息
-  addMessage(prompt, 'user')
-  inputValue.value = ''
-  inputRows.value = MIN_INPUT_ROWS
+  const displaySegments = Array.isArray(snapshot.displaySegments)
+    ? snapshot.displaySegments.map((segment) => ({ ...segment }))
+    : splitProtocolText(prompt)
+  addMessage(prompt, 'user', { displaySegments })
+  protocolComposerRef.value?.clear?.()
+  composerPrompt.value = ''
   isLoading.value = true
 
   // 4) 显示加载中消息（用于流式更新）
@@ -575,17 +603,6 @@ async function handleGenerate() {
     }
   )
 }
-
-// 键盘事件处理（Enter 发送）
-function handleKeydown(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    // 仅在非加载状态且有内容时发送
-    if (!isLoading.value && inputValue.value.trim()) {
-      handleGenerate()
-    }
-  }
-}
 </script>
 
 <template>
@@ -634,9 +651,34 @@ function handleKeydown(e) {
               <div class="msg-header">
                 <span class="role-name">{{ msg.type === 'user' ? 'You' : 'NEXUS' }}</span>
                 <span class="msg-time">{{ msg.timestamp }}</span>
+              </div>
+              <AgentExecutionTimeline
+                v-if="shouldShowRuntimePanels(msg)"
+                :events="Array.isArray(msg.executionEvents) ? msg.executionEvents : []"
+                :open="msg.executionPanelOpen !== false"
+                :completed="!!msg.runtimeCompleted"
+                :runtime-status="String(msg.runtimeStatus || '')"
+              />
+              <AgentThinkingPanel
+                v-if="shouldShowRuntimePanels(msg)"
+                :content="String(msg.thinkingContent || '')"
+                :open="msg.thinkingPanelOpen !== false"
+                :completed="!!msg.runtimeCompleted"
+                :runtime-status="String(msg.runtimeStatus || '')"
+                :placeholder="shouldShowRuntimePanels(msg)"
+              />
+              <div
+                v-if="msg.type === 'user'"
+                class="msg-body user-protocol-body"
+              >
+                <template v-for="(segment, idx) in renderUserMessageSegments(msg)" :key="`${msg.id}-${idx}`">
+                  <span v-if="segment.type === 'skill'" class="msg-skill-chip">{{ segment.name }}</span>
+                  <span v-else-if="segment.type === 'node'" class="msg-node-chip">{{ segment.label || segment.node_id }}</span>
+                  <span v-else>{{ segment.text }}</span>
+                </template>
                 <button 
                   v-if="!msg.isLoading && msg.content" 
-                  class="copy-btn" 
+                  class="copy-btn copy-btn-bubble" 
                   @click="copyMessage(msg.content, msg.id)"
                   title="复制内容"
                 >
@@ -644,22 +686,13 @@ function handleKeydown(e) {
                   <Copy v-else size="12" />
                 </button>
               </div>
-              <AgentExecutionTimeline
-                v-if="shouldShowRuntimePanels(msg)"
-                :events="Array.isArray(msg.executionEvents) ? msg.executionEvents : []"
-                :open="msg.executionPanelOpen !== false"
-                :completed="!!msg.runtimeCompleted"
-              />
-              <AgentThinkingPanel
-                v-if="shouldShowRuntimePanels(msg)"
-                :content="String(msg.thinkingContent || '')"
-                :open="msg.thinkingPanelOpen !== false"
-                :completed="!!msg.runtimeCompleted"
-                :placeholder="shouldShowRuntimePanels(msg)"
-              />
               <AgentAnswerContent
+                v-else
                 :is-loading="!!msg.isLoading"
                 :content-html="renderMessageContent(msg.content)"
+                :show-copy="!msg.isLoading && !!msg.content"
+                :copied="!!copiedMap.get(msg.id)"
+                @copy="copyMessage(msg.content, msg.id)"
               />
             </div>
           </div>
@@ -675,15 +708,13 @@ function handleKeydown(e) {
         <!-- 输入区域 -->
         <div class="input-area">
           <div class="input-wrapper">
-            <textarea 
-              ref="inputRef"
-              v-model="inputValue"
-              id="fastflow-input"
-              placeholder="有问题，尽管问" 
-              :rows="inputRows"
-              @input="updateInputRows"
-              @keydown="handleKeydown"
-            ></textarea>
+            <ProtocolComposer
+              ref="protocolComposerRef"
+              v-model="composerPrompt"
+              :can-submit="!isLoading"
+              placeholder="有问题，尽管问"
+              @submit="handleGenerate"
+            />
             
             <div class="input-footer">
               <div class="left-controls">
@@ -695,6 +726,24 @@ function handleKeydown(e) {
                   min-width="120px"
                   position="top"
                 />
+                <button
+                  type="button"
+                  class="slash-trigger-btn"
+                  data-protocol-trigger-btn="1"
+                  title="插入 / 并打开技能面板"
+                  @click="handleSlashTrigger"
+                >
+                  /
+                </button>
+                <button
+                  type="button"
+                  class="slash-trigger-btn"
+                  data-protocol-trigger-btn="1"
+                  title="插入 # 并打开节点面板"
+                  @click="handleHashTrigger"
+                >
+                  #
+                </button>
               </div>
 
               <div class="right-controls">
@@ -711,7 +760,7 @@ function handleKeydown(e) {
                 <button 
                   id="fastflow-send-btn"
                   class="send-btn" 
-                  :disabled="!inputValue.trim() || isLoading"
+                  :disabled="!composerPrompt.trim() || isLoading"
                   @click="handleGenerate"
                 >
                   <Send size="16" />

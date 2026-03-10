@@ -20,6 +20,13 @@ function notifyAuthExpired() {
   window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
 }
 
+function buildApiError(result, fallbackMessage) {
+  const error = new Error(result?.message || fallbackMessage)
+  error.code = result?.code
+  error.fieldErrors = result?.data?.fieldErrors || {}
+  return error
+}
+
 // AES 加密函数
 function encryptPassword(password) {
   const key = CryptoJS.enc.Utf8.parse(PASSWORD_SECRET_KEY)
@@ -51,7 +58,7 @@ export const authService = {
       const result = await response.json()
       
       if (!response.ok || result.code !== 200) {
-        throw new Error(result.message || '登录失败，请检查账号密码')
+        throw buildApiError(result, '登录失败，请检查账号密码')
       }
       
       // 登录成功，处理返回数据
@@ -109,15 +116,29 @@ export const authService = {
   },
 
   async register(data) {
-    // 暂时保持 Mock，后续对接真实接口
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          success: true,
-          message: '注册成功'
+    try {
+      const encryptedPassword = encryptPassword(data.password)
+      const response = await fetch(`${BASE_URL}/fastflow/api/v1/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          username: data.username,
+          email: data.email,
+          password: encryptedPassword,
+          inviteCode: data.inviteCode
         })
-      }, 1000)
-    })
+      })
+      const result = await response.json()
+      if (!response.ok || result.code !== 200) {
+        throw buildApiError(result, '注册失败')
+      }
+      return result.data
+    } catch (error) {
+      console.error('[FastFlow] Register error:', error)
+      throw error
+    }
   },
 
   logout() {

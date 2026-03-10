@@ -1,9 +1,9 @@
-package com.fastflow.controller;
+package com.fastflow.controller.model;
 
 import com.fastflow.common.annotation.LoginCheck;
 import com.fastflow.common.result.RestfulResult;
 import com.fastflow.entity.model.ModelConfigDTO;
-import com.fastflow.service.ModelConfigService;
+import com.fastflow.service.model.ModelConfigService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 

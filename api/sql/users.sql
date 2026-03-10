@@ -23,14 +23,13 @@ SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS `users`;
 CREATE TABLE `users` (
   `uid` bigint(20) NOT NULL COMMENT 'UID (9位随机数字)',
-  `username` varchar(50) NOT NULL COMMENT '用户名称 (唯一)',
+  `username` varchar(50) NOT NULL COMMENT '用户名称',
   `email` varchar(100) DEFAULT NULL COMMENT '用户邮箱',
   `password` varchar(100) NOT NULL COMMENT '加密密码',
   `status` tinyint(4) NOT NULL DEFAULT '1' COMMENT '账号状态：1-正常, 2-封禁, 3-注销',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
   PRIMARY KEY (`uid`),
-  UNIQUE KEY `uk_username` (`username`),
   UNIQUE KEY `uk_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
 

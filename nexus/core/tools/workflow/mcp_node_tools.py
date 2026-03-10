@@ -23,12 +23,21 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from langchain_core.tools import tool
 
-from nexus.config.logger import get_logger
+from nexus.config.logger import get_logger, log_tool_failure, log_tool_success
 from nexus.core.schemas import ChatRequestContext
 
-from .cache import WorkflowGraphCache
+from .context import WorkflowGraphContext
 
 logger = get_logger(__name__)
+
+
+def _extract_error_text(error: Dict[str, Any]) -> str:
+    return str(error.get("error") or "").strip()
+
+
+def _extract_candidate_count(error: Dict[str, Any]) -> int:
+    candidates = error.get("candidates")
+    return len(candidates) if isinstance(candidates, list) else 0
 
 
 @dataclass
@@ -55,19 +64,31 @@ class WorkflowGraphMcpTools:
 
     def __init__(self, context: ChatRequestContext):
         self._context = context
-        # 与 base_tools 共用缓存策略：本次请求优先，其次 session 进程内兜底缓存。
-        self._cache = WorkflowGraphCache(context)
-        self._cache.cache_if_present()
+        # 与 base_tools 共用同一套工作流上下文读取逻辑（只读当前请求上下文）。
+        self._context_reader = WorkflowGraphContext(context)
 
-    def _resolve_node(self, node_id_or_name: str) -> Tuple[Optional[ResolvedNode], Optional[Dict[str, Any]]]:
+    def _resolve_node(
+        self,
+        node_id_or_name: str,
+        expected_flow_node_type: Optional[str] = None,
+    ) -> Tuple[Optional[ResolvedNode], Optional[Dict[str, Any]]]:
         """
         返回 (ResolvedNode, error_json)。error_json 不为 None 表示未命中或命中不唯一。
+
+        匹配顺序：
+        1) nodeId 精确匹配
+        2) name 精确匹配
+        3) name 包含匹配
+
+        expected_flow_node_type:
+        - 如果传入，则优先只保留目标类型节点
+        - 这样像“辅助研判”这类同时存在 `toolSet` 和 `tools` 节点的名称，会优先命中正确类型
         """
         needle = str(node_id_or_name or "").strip()
         if not needle:
             return None, {"error": "node_id_or_name is empty"}
 
-        graph = self._cache.get_full_show_workflow_graph_dict()
+        graph = self._context_reader.get_full_show_workflow_graph_dict()
         nodes = graph.get("nodes", [])
         if not isinstance(nodes, list):
             return None, {"error": "workflow_graph.nodes is not a list"}
@@ -87,15 +108,21 @@ class WorkflowGraphMcpTools:
                     None,
                 )
 
-        # 2) name 模糊匹配（包含）。若命中多个，返回候选，禁止默认选择第一个。
         needle_cf = needle.casefold()
-        candidates: List[ResolvedNode] = []
-        for node in nodes:
-            if not isinstance(node, dict):
-                continue
-            name = str(node.get("name") or "")
-            if needle_cf and needle_cf in name.casefold():
-                candidates.append(
+
+        def _collect_name_matches(match_exact: bool) -> List[ResolvedNode]:
+            matched_nodes: List[ResolvedNode] = []
+            for node in nodes:
+                if not isinstance(node, dict):
+                    continue
+                name = str(node.get("name") or "")
+                if not needle_cf:
+                    continue
+                if match_exact and needle_cf != name.casefold():
+                    continue
+                if not match_exact and needle_cf not in name.casefold():
+                    continue
+                matched_nodes.append(
                     ResolvedNode(
                         node_id=str(node.get("nodeId") or ""),
                         flow_node_type=str(node.get("flowNodeType") or ""),
@@ -103,15 +130,46 @@ class WorkflowGraphMcpTools:
                         raw=node,
                     )
                 )
+            if not expected_flow_node_type:
+                return matched_nodes
+            matched_target_type = [
+                matched_node for matched_node in matched_nodes if matched_node.flow_node_type == expected_flow_node_type
+            ]
+            return matched_target_type or matched_nodes
 
-        if not candidates:
-            return None, {"error": f"node not found: {needle}"}
-        if len(candidates) > 1:
+        exact_name_candidates = _collect_name_matches(match_exact=True)
+        if len(exact_name_candidates) == 1:
+            return exact_name_candidates[0], None
+        if len(exact_name_candidates) > 1:
             return None, {
                 "error": f"node name is ambiguous: {needle}",
-                "candidates": [{"nodeId": c.node_id, "flowNodeType": c.flow_node_type, "name": c.name} for c in candidates],
+                "candidates": [
+                    {
+                        "nodeId": candidate.node_id,
+                        "flowNodeType": candidate.flow_node_type,
+                        "name": candidate.name,
+                    }
+                    for candidate in exact_name_candidates
+                ],
             }
-        return candidates[0], None
+
+        # 3) name 模糊匹配（包含）。若命中多个，返回候选，禁止默认选择第一个。
+        fuzzy_candidates = _collect_name_matches(match_exact=False)
+        if not fuzzy_candidates:
+            return None, {"error": f"node not found: {needle}"}
+        if len(fuzzy_candidates) > 1:
+            return None, {
+                "error": f"node name is ambiguous: {needle}",
+                "candidates": [
+                    {
+                        "nodeId": candidate.node_id,
+                        "flowNodeType": candidate.flow_node_type,
+                        "name": candidate.name,
+                    }
+                    for candidate in fuzzy_candidates
+                ],
+            }
+        return fuzzy_candidates[0], None
 
     def _extract_tool_list_from_toolset_node(self, toolset_node: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], str]:
         """
@@ -161,12 +219,15 @@ class WorkflowGraphMcpTools:
         要求：
         - items 必须是 toolList 原文投影（name/description/inputSchema），禁止翻译/改写/补全。
         """
-        resolved, error = self._resolve_node(node_id_or_name)
+        resolved, error = self._resolve_node(node_id_or_name, expected_flow_node_type="toolSet")
         if error:
             result_json = json.dumps(error, ensure_ascii=False)
-            logger.info(
-                "[执行工具失败] tool=get_toolset_tools result=%s",
-                result_json,
+            log_tool_failure(
+                logger,
+                "get_toolset_tools",
+                error=_extract_error_text(error),
+                query=str(node_id_or_name or "").strip(),
+                candidate_count=_extract_candidate_count(error),
             )
             return result_json
 
@@ -176,9 +237,14 @@ class WorkflowGraphMcpTools:
                 "node": {"nodeId": resolved.node_id, "flowNodeType": resolved.flow_node_type, "name": resolved.name},
             }
             result_json = json.dumps(error, ensure_ascii=False)
-            logger.info(
-                "[执行工具失败] tool=get_toolset_tools result=%s",
-                result_json,
+            log_tool_failure(
+                logger,
+                "get_toolset_tools",
+                error=str(error.get("error") or ""),
+                query=str(node_id_or_name or "").strip(),
+                resolved_node_id=resolved.node_id,
+                resolved_type=resolved.flow_node_type,
+                resolved_name=resolved.name,
             )
             return result_json
 
@@ -199,10 +265,13 @@ class WorkflowGraphMcpTools:
             "markdown_table": self._render_tool_list_markdown(tool_list),
         }
         result_json = json.dumps(result, ensure_ascii=False)
-        logger.info(
-            "[执行工具成功] tool=get_toolset_tools count=%d result=%s",
-            len(tool_list),
-            result_json,
+        log_tool_success(
+            logger,
+            "get_toolset_tools",
+            node_id=resolved.node_id,
+            name=resolved.name,
+            count=len(tool_list),
+            path=path_used,
         )
         return result_json
 
@@ -213,12 +282,16 @@ class WorkflowGraphMcpTools:
         handle 说明：
         - 如果传入 handle，则只统计 sourceHandle 匹配的连线。
         """
-        resolved, error = self._resolve_node(node_id_or_name)
+        resolved, error = self._resolve_node(node_id_or_name, expected_flow_node_type="tools")
         if error:
             result_json = json.dumps(error, ensure_ascii=False)
-            logger.info(
-                "[执行工具失败] tool=get_tools_node_mcp_tools result=%s",
-                result_json,
+            log_tool_failure(
+                logger,
+                "get_tools_node_mcp_tools",
+                error=_extract_error_text(error),
+                query=str(node_id_or_name or "").strip(),
+                handle=str(handle or "").strip(),
+                candidate_count=_extract_candidate_count(error),
             )
             return result_json
 
@@ -228,21 +301,30 @@ class WorkflowGraphMcpTools:
                 "node": {"nodeId": resolved.node_id, "flowNodeType": resolved.flow_node_type, "name": resolved.name},
             }
             result_json = json.dumps(error, ensure_ascii=False)
-            logger.info(
-                "[执行工具失败] tool=get_tools_node_mcp_tools result=%s",
-                result_json,
+            log_tool_failure(
+                logger,
+                "get_tools_node_mcp_tools",
+                error=str(error.get("error") or ""),
+                query=str(node_id_or_name or "").strip(),
+                handle=str(handle or "").strip(),
+                resolved_node_id=resolved.node_id,
+                resolved_type=resolved.flow_node_type,
+                resolved_name=resolved.name,
             )
             return result_json
 
-        graph = self._cache.get_full_show_workflow_graph_dict()
+        graph = self._context_reader.get_full_show_workflow_graph_dict()
         edges = graph.get("edges", [])
         nodes = graph.get("nodes", [])
         if not isinstance(edges, list) or not isinstance(nodes, list):
             error = {"error": "workflow_graph.edges/nodes is not a list"}
             result_json = json.dumps(error, ensure_ascii=False)
-            logger.info(
-                "[执行工具失败] tool=get_tools_node_mcp_tools result=%s",
-                result_json,
+            log_tool_failure(
+                logger,
+                "get_tools_node_mcp_tools",
+                error=str(error.get("error") or ""),
+                query=str(node_id_or_name or "").strip(),
+                handle=str(handle or "").strip(),
             )
             return result_json
 
@@ -307,11 +389,14 @@ class WorkflowGraphMcpTools:
             "markdown_table": self._render_tool_list_markdown(all_items),
         }
         result_json = json.dumps(result, ensure_ascii=False)
-        logger.info(
-            "[执行工具成功] tool=get_tools_node_mcp_tools toolset_count=%d count=%d result=%s",
-            len(toolset_nodes),
-            len(all_items),
-            result_json,
+        log_tool_success(
+            logger,
+            "get_tools_node_mcp_tools",
+            node_id=resolved.node_id,
+            name=resolved.name,
+            handle=str(handle or "").strip(),
+            toolset_count=len(toolset_nodes),
+            count=len(all_items),
         )
         return result_json
 

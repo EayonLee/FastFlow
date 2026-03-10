@@ -3,14 +3,19 @@ import { cache } from '@/utils/cache.js'
 import { authService } from '@/services/auth.js'
 import NeonButton from '@/components/NeonButton.vue'
 import { onMounted, ref, watch } from 'vue'
-import validator from 'validator'
+import {
+  getEmailError,
+  getInviteCodeError,
+  getPasswordError,
+  getUsernameError
+} from '@/utils/validators.js'
 
 const emit = defineEmits(['navigate'])
 
 const form = ref({
-  name: '',
+  username: '',
   email: '',
-  code: '',
+  inviteCode: '',
   password: '',
   confirmPassword: ''
 })
@@ -32,116 +37,79 @@ onMounted(async () => {
 })
 
 const errors = ref({
-  name: '',
+  username: '',
   email: '',
-  code: '',
+  inviteCode: '',
   password: '',
   confirmPassword: ''
 })
 
 const isLoading = ref(false)
-const codeTimer = ref(0)
-let timerInterval = null
+const globalError = ref('')
 
 function clearError(field) {
   errors.value[field] = ''
-}
-
-function validateEmail(email) {
-  return validator.isEmail(email)
-}
-
-function startTimer() {
-  if (codeTimer.value > 0) return
-  codeTimer.value = 60
-  timerInterval = setInterval(() => {
-    codeTimer.value--
-    if (codeTimer.value <= 0 && timerInterval) {
-      clearInterval(timerInterval)
-      timerInterval = null
-    }
-  }, 1000)
-}
-
-function sendCode() {
-  errors.value.email = ''
-  if (!form.value.email) {
-    errors.value.email = '请输入邮箱'
-    return
-  } else if (!validateEmail(form.value.email)) {
-    errors.value.email = '邮箱格式不正确'
-    return
-  }
-  
-  // Mock send code
-  console.info('[FastFlow] Sending code to', form.value.email)
-  startTimer()
+  globalError.value = ''
 }
 
 function resetErrors() {
   Object.keys(errors.value).forEach((key) => {
     errors.value[key] = ''
   })
+  globalError.value = ''
+}
+
+function applyFieldErrors(fieldErrors) {
+  let hasFieldError = false
+  if (!fieldErrors || typeof fieldErrors !== 'object') return hasFieldError
+  const fieldMap = {
+    username: 'username',
+    email: 'email',
+    inviteCode: 'inviteCode',
+    password: 'password'
+  }
+  Object.entries(fieldMap).forEach(([backendField, formField]) => {
+    if (fieldErrors[backendField]) {
+      errors.value[formField] = fieldErrors[backendField]
+      hasFieldError = true
+    }
+  })
+  return hasFieldError
 }
 
 async function handleRegister() {
-  // Reset errors
   resetErrors()
-  
-  let hasError = false
-
-  if (!form.value.name) {
-    errors.value.name = '请输入用户名'
-    hasError = true
-  }
-
-  if (!form.value.email) {
-    errors.value.email = '请输入邮箱'
-    hasError = true
-  } else if (!validateEmail(form.value.email)) {
-    errors.value.email = '邮箱格式不正确'
-    hasError = true
-  }
-
-  if (!form.value.code) {
-    errors.value.code = '请输入验证码'
-    hasError = true
-  }
-
-  if (!form.value.password) {
-    errors.value.password = '请输入密码'
-    hasError = true
-  }
-
+  errors.value.username = getUsernameError(form.value.username)
+  errors.value.email = getEmailError(form.value.email)
+  errors.value.inviteCode = getInviteCodeError(form.value.inviteCode)
+  errors.value.password = getPasswordError(form.value.password)
   if (!form.value.confirmPassword) {
     errors.value.confirmPassword = '请确认密码'
-    hasError = true
   } else if (form.value.password !== form.value.confirmPassword) {
     errors.value.confirmPassword = '两次密码不一致'
-    hasError = true
   }
-
-  if (hasError) return
+  const hasError = Object.values(errors.value).some((message) => Boolean(message))
+  if (hasError) {
+    return
+  }
 
   isLoading.value = true
 
   try {
     await authService.register({
-      username: form.value.name,
+      username: form.value.username,
       email: form.value.email,
       password: form.value.password,
-      code: form.value.code
+      inviteCode: form.value.inviteCode
     })
-    
-    // 注册成功后清除缓存
     await cache.removeWithTTL(REGISTER_FORM_CACHE_KEY)
-
-    // 注册成功后跳转登录
     emit('navigate', 'login')
   } catch (error) {
     console.error('[FastFlow] Register failed:', error)
-    // 这里简单处理，假设是邮箱被占用的错误，实际应根据后端返回
-    errors.value.email = error.message || '注册失败'
+    const hasFieldError = applyFieldErrors(error?.fieldErrors)
+    if (!hasFieldError) {
+      globalError.value = error.message || '注册失败'
+    }
   } finally {
     isLoading.value = false
   }
@@ -158,13 +126,13 @@ function goToLogin() {
       <div class="form-group">
         <label>用户名</label>
         <input 
-          v-model="form.name" 
+          v-model="form.username"
           type="text" 
-          placeholder="您的称呼" 
-          :class="{ 'error': errors.name }"
-          @input="clearError('name')"
+          placeholder="请输入5-12位中英文或数字"
+          :class="{ 'error': errors.username }"
+          @input="clearError('username')"
         >
-        <div class="error-msg" v-if="errors.name">{{ errors.name }}</div>
+        <div class="error-msg" v-if="errors.username">{{ errors.username }}</div>
       </div>
 
       <div class="form-group">
@@ -172,33 +140,23 @@ function goToLogin() {
         <input 
           v-model="form.email" 
           type="email" 
-          placeholder="your@email.com" 
+          placeholder="请输入 @360.cn 邮箱"
           :class="{ 'error': errors.email }"
           @input="clearError('email')"
         >
         <div class="error-msg" v-if="errors.email">{{ errors.email }}</div>
       </div>
 
-      <div class="form-group code-group">
-        <div class="input-wrapper">
-          <label>验证码</label>
-          <input 
-            v-model="form.code" 
-            type="text" 
-            placeholder="6位数字" 
-            :class="{ 'error': errors.code }"
-            @input="clearError('code')"
-          >
-          <div class="error-msg" v-if="errors.code">{{ errors.code }}</div>
-        </div>
-        <NeonButton
-          type="button"
-          class="btn-code"
-          :disabled="codeTimer > 0"
-          @click="sendCode"
+      <div class="form-group">
+        <label>邀请码</label>
+        <input
+          v-model="form.inviteCode"
+          type="text"
+          placeholder="请输入6位邀请码"
+          :class="{ 'error': errors.inviteCode }"
+          @input="clearError('inviteCode')"
         >
-          {{ codeTimer > 0 ? `${codeTimer}s` : '获取验证码' }}
-        </NeonButton>
+        <div class="error-msg" v-if="errors.inviteCode">{{ errors.inviteCode }}</div>
       </div>
       
       <div class="form-group">
@@ -206,6 +164,7 @@ function goToLogin() {
         <input 
           v-model="form.password" 
           type="password" 
+          placeholder="请输入6-22位密码（支持 _-@!#$%&*）"
           :class="{ 'error': errors.password }"
           @input="clearError('password')"
         >
@@ -222,6 +181,8 @@ function goToLogin() {
         >
         <div class="error-msg" v-if="errors.confirmPassword">{{ errors.confirmPassword }}</div>
       </div>
+
+      <div class="error-msg global-error" v-if="globalError">{{ globalError }}</div>
 
       <NeonButton type="submit" full-width :disabled="isLoading" style="margin-top: 8px;">
         {{ isLoading ? '注册中...' : '注册' }}
@@ -280,28 +241,9 @@ function goToLogin() {
   margin-top: 4px;
 }
 
-.code-group {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-}
-
-.code-group .input-wrapper {
-  flex: 1;
-}
-
-.btn-code {
-  /* 复用 NeonButton 的整体风格，但尺寸更紧凑，保证和输入框对齐 */
-  height: 38px;
-  margin-bottom: 2px;
-  padding: 0 12px !important;
-  font-size: 12px !important;
-  white-space: nowrap;
-}
-
-.btn-code:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.global-error {
+  margin-top: 8px;
+  text-align: center;
 }
 
 .auth-footer {

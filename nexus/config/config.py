@@ -16,6 +16,29 @@ class Settings(BaseSettings):
     
     # FastFlow Nexus 服务端配置
     FASTFLOW_API_URL: str = "http://localhost:8080"
+
+    # 历史会话配置
+    # 每个 session 最多保留的消息条数（短期记忆窗口）
+    SESSION_HISTORY_MAX_MESSAGES: int = 10
+    # 会话过期时间（秒）
+    # <= 0 表示不过期，默认 1 小时
+    SESSION_HISTORY_EXPIRE_SECONDS: int = 60 * 60
+
+    # 工具调用策略配置
+    # 单个用户问题允许执行的工具调用硬上限（防止失控循环）
+    TOOL_MAX_CALLS_PER_QUESTION: int = 50
+    # 工具循环检测：warning 阈值（仅告警，不熔断）
+    TOOL_LOOP_WARNING_THRESHOLD: int = 10
+    # 工具循环检测：critical 阈值（停止当前工具路径）
+    TOOL_LOOP_CRITICAL_THRESHOLD: int = 20
+    # 工具循环检测：global 阈值（停止本轮全部工具调用）
+    TOOL_LOOP_GLOBAL_THRESHOLD: int = 30
+    # 工具循环检测窗口：仅观察最近 N 次工具执行历史
+    TOOL_LOOP_HISTORY_SIZE: int = 30
+
+    # 对话回答充足性复核配置
+    # 单个用户问题最多允许复核回环次数（防止 review 死循环）
+    CHAT_ANSWER_SUFFICIENCY_MAX_REVIEW_ROUNDS: int = 3
     
     # 日志配置
     LOG_LEVEL: str = "INFO"

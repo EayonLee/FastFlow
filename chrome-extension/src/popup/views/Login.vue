@@ -3,7 +3,7 @@ import { cache } from '@/utils/cache.js'
 import { authService } from '@/services/auth.js'
 import NeonButton from '@/components/NeonButton.vue'
 import { onMounted, ref, watch } from 'vue'
-import validator from 'validator'
+import { getEmailError, getPasswordError } from '@/utils/validators.js'
 
 const emit = defineEmits(['navigate', 'login-success'])
 
@@ -57,10 +57,23 @@ onMounted(async () => {
 
 function clearError(field) {
   errors.value[field] = ''
+  globalError.value = ''
 }
 
-function validateEmail(email) {
-  return validator.isEmail(email)
+function applyFieldErrors(fieldErrors) {
+  let hasFieldError = false
+  if (!fieldErrors || typeof fieldErrors !== 'object') return hasFieldError
+  const fieldMap = {
+    email: 'email',
+    password: 'password'
+  }
+  Object.entries(fieldMap).forEach(([backendField, formField]) => {
+    if (fieldErrors[backendField]) {
+      errors.value[formField] = fieldErrors[backendField]
+      hasFieldError = true
+    }
+  })
+  return hasFieldError
 }
 
 const globalError = ref('')
@@ -73,19 +86,15 @@ async function handleLogin() {
 
   let hasError = false
 
-  if (!form.value.email) {
-    errors.value.email = '请输入邮箱'
-    hasError = true
-  } else if (!validateEmail(form.value.email)) {
-    errors.value.email = '邮箱格式不正确'
+  const emailError = getEmailError(form.value.email)
+  if (emailError) {
+    errors.value.email = emailError
     hasError = true
   }
 
-  if (!form.value.password) {
-    errors.value.password = '请输入密码'
-    hasError = true
-  } else if (form.value.password.length < 8) {
-    errors.value.password = '密码长度至少8位'
+  const passwordError = getPasswordError(form.value.password)
+  if (passwordError) {
+    errors.value.password = passwordError
     hasError = true
   }
 
@@ -113,11 +122,12 @@ async function handleLogin() {
     emit('login-success', user)
   } catch (error) {
     console.error('[FastFlow] Login failed:', error)
-    // 区分错误类型
     if (error.message.includes('Failed to fetch')) {
       globalError.value = '无法连接到服务器，请检查网络或稍后重试'
-    } else {
+    } else if (!applyFieldErrors(error?.fieldErrors)) {
       errors.value.password = error.message || '登录失败，请检查账号密码'
+    } else {
+      globalError.value = ''
     }
   } finally {
     isLoading.value = false
@@ -137,7 +147,7 @@ function goToRegister() {
         <input 
           v-model="form.email" 
           type="email" 
-          placeholder="your@email.com" 
+          placeholder="请输入 @360.cn 邮箱"
           :class="{ 'error': errors.email }"
           @input="clearError('email')"
           novalidate
@@ -150,6 +160,7 @@ function goToRegister() {
         <input 
           v-model="form.password" 
           type="password" 
+          placeholder="请输入6-22位密码（支持 _-@!#$%&*）"
           :class="{ 'error': errors.password }"
           @input="clearError('password')"
         >

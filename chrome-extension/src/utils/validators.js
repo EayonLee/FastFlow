@@ -1,42 +1,28 @@
-/**
- * 统一校验工具函数文件
- * 包含项目中通用的表单校验逻辑
- */
+const USERNAME_REGEX = /^[A-Za-z0-9\u4e00-\u9fa5]{5,12}$/
+const EMAIL_360_REGEX = /^[a-zA-Z0-9._%+-]+@360\.cn$/
+const INVITE_CODE_REGEX = /^[A-Za-z0-9]{6}$/
+const PASSWORD_REGEX = /^[A-Za-z0-9_@!#$%&*\-]{6,22}$/
 
-/**
- * 校验用户名
- * 规则：长度大于5位，支持英文、数字和_，不能以数字和_开头，必须以英文开头
- * @param name 用户名
- */
-export function validateName(name) {
-  return /^[a-zA-Z][a-zA-Z0-9_]{4,}$/.test(name)
+export function getUsernameError(username) {
+  if (!username) return '请输入用户名'
+  if (!USERNAME_REGEX.test(username)) return '用户名仅支持中英文和数字，长度为5-12位'
+  return ''
 }
 
-/**
- * 校验邮箱
- * 规则：必须是 @360.cn 结尾的企业邮箱
- * @param email 邮箱地址
- */
-export function validateEmail(email) {
-  const emailRegex = /^[a-zA-Z0-9._%+-]+@360\.cn$/
-  return emailRegex.test(email)
+export function getEmailError(email) {
+  if (!email) return '请输入邮箱'
+  if (!EMAIL_360_REGEX.test(email)) return '邮箱格式不正确，且必须是 @360.cn 邮箱'
+  return ''
 }
 
-/**
- * 校验密码
- * 规则：8-22位字符，必须包含至少一个字母和一个数字
- * @param password 密码
- */
-export function validatePassword(password) {
-  const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{8,22}$/
-  return passwordRegex.test(password)
+export function getInviteCodeError(inviteCode) {
+  if (!inviteCode) return '请输入邀请码'
+  if (!INVITE_CODE_REGEX.test(inviteCode)) return '邀请码必须是6位字母或数字'
+  return ''
 }
 
-/**
- * 校验验证码
- * 规则：4位数字
- * @param code 验证码
- */
-export function validateCode(code) {
-  return /^\d{4}$/.test(code)
+export function getPasswordError(password) {
+  if (!password) return '请输入密码'
+  if (!PASSWORD_REGEX.test(password)) return '密码仅支持大小写英文、数字和 _-@!#$%&*，长度为6-22位'
+  return ''
 }

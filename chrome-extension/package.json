@@ -8,6 +8,10 @@
     "watch": "vite build --watch --mode development"
   },
   "dependencies": {
+    "@tiptap/core": "^2.12.0",
+    "@tiptap/extension-placeholder": "^2.12.0",
+    "@tiptap/starter-kit": "^2.12.0",
+    "@tiptap/vue-3": "^2.12.0",
     "axios": "^1.13.4",
     "crypto-js": "^4.2.0",
     "dagre": "^0.8.5",
@@ -17,7 +21,6 @@
     "markdown-it": "^14.1.1",
     "mermaid": "^11.12.2",
     "svg-pan-zoom": "^3.6.2",
-    "validator": "^13.15.26",
     "vue": "^3.4.21"
   },
   "devDependencies": {

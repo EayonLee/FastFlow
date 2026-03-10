@@ -1,8 +1,8 @@
-package com.fastflow.controller;
+package com.fastflow.controller.user;
 
 import com.fastflow.common.result.RestfulResult;
 import com.fastflow.entity.user.UserInfo;
-import com.fastflow.service.UserService;
+import com.fastflow.service.user.UserService;
 import com.fastflow.common.annotation.LoginCheck;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;

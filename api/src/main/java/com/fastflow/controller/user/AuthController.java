@@ -1,9 +1,9 @@
-package com.fastflow.controller;
+package com.fastflow.controller.user;
 
 import com.fastflow.common.result.RestfulResult;
 import com.fastflow.entity.auth.LoginDTO;
 import com.fastflow.entity.auth.RegisterDTO;
-import com.fastflow.service.AuthService;
+import com.fastflow.service.user.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -32,7 +32,7 @@ public class AuthController {
      * 如果登录失败（如用户名或密码错误），将抛出 BusinessException 异常，
      * 由 GlobalExceptionHandler 全局异常处理器捕获并返回标准错误响应。
      *
-     * @param request 登录信息DTO，包含用户名、密码等，并进行参数校验
+     * @param request 登录信息DTO，包含邮箱、密码等，并进行参数校验
      * @return 登录成功后的用户信息VO，包含JWT token
      */
     @PostMapping("/login")
@@ -44,10 +44,10 @@ public class AuthController {
      * 用户注册接口
      * <p>
      * 接收用户注册信息，调用Service层进行业务处理。
-     * 如果Service层抛出 BusinessException (如用户名已存在)，
+     * 如果Service层抛出 BusinessException (如邮箱已存在)，
      * 将由 GlobalExceptionHandler 全局异常处理器自动捕获并返回标准错误响应。
      *
-     * @param request 注册信息DTO，包含用户名、密码、邮箱等，并进行参数校验
+     * @param request 注册信息DTO，包含用户名、密码、邮箱、邀请码等，并进行参数校验
      * @return 注册成功后的用户信息VO
      */
     @PostMapping("/register")

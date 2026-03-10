@@ -154,7 +154,7 @@ onUnmounted(() => {
       <div class="footer-content">
         <span>@ 2026 Fast<span class="highlight">Flow</span></span>
         <span class="divider">|</span>
-        <span>Created By <span class="highlight">lizhengtai@360.cn</span></span>
+        <span>Created By <span class="highlight footer-email">lizhengtai@360.cn</span></span>
       </div>
     </div>
   </div>
@@ -224,6 +224,13 @@ body {
 .highlight {
   color: var(--accent-neon);
   font-weight: 500;
+}
+
+.footer-email {
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  font-variant-ligatures: none;
 }
 
 .divider {

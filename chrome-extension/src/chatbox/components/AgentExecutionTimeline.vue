@@ -13,6 +13,10 @@ const props = defineProps({
   completed: {
     type: Boolean,
     default: false
+  },
+  runtimeStatus: {
+    type: String,
+    default: 'running'
   }
 })
 
@@ -32,7 +36,10 @@ const normalizedEvents = computed(() => {
 
 const liveLine = computed(() => {
   const last = normalizedEvents.value.length ? normalizedEvents.value[normalizedEvents.value.length - 1] : null
-  if (!last) return props.completed ? '执行完成' : 'Deep Thinking...'
+  if (!last) {
+    if (props.runtimeStatus === 'failed') return '执行中断：请求失败'
+    return props.completed ? '执行完成' : 'Deep Thinking ...'
+  }
   return last.detail
 })
 
@@ -157,7 +164,9 @@ function handleToggle(event) {
     </summary>
 
     <ol class="runtime-list">
-      <li v-if="!normalizedEvents.length" class="runtime-empty">Deep Thinking...</li>
+      <li v-if="!normalizedEvents.length" class="runtime-empty">
+        {{ props.runtimeStatus === 'failed' ? '执行中断：本次请求失败' : 'Deep Thinking ...' }}
+      </li>
       <li v-for="event in normalizedEvents" :key="event.id" class="runtime-item">
         <span class="runtime-dot" :class="getToneClass(event.type)"></span>
         <div class="runtime-main">

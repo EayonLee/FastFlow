@@ -270,6 +270,66 @@ def get_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     return logger
 
+
+def _normalize_log_field_value(value: Any) -> str:
+    """
+    将日志字段转换成稳定、可读的字符串。
+
+    设计目标：
+    - 避免在日志中出现 Python 原生 repr
+    - 保持 key=value 风格稳定，便于检索
+    - 对包含空白/特殊字符的文本自动加引号，避免日志被误读
+    """
+
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (dict, list, tuple)):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    normalized = " ".join(str(value).split())
+    if not normalized:
+        return ""
+    if any(char.isspace() for char in normalized) or "=" in normalized or ":" in normalized:
+        return json.dumps(normalized, ensure_ascii=False)
+    return normalized
+
+
+def _build_tool_log_message(status: str, tool: str, **fields: Any) -> str:
+    """
+    统一构建工具日志消息。
+
+    固定模板：
+    - `[工具执行] status=<success|failed> tool=<tool_name> ...`
+
+    这样在日志平台中可以稳定按 `status`、`tool` 和关键上下文字段检索。
+    """
+
+    message_parts = ["[工具执行]", f"status={status}", f"tool={tool}"]
+    for key, value in fields.items():
+        normalized_value = _normalize_log_field_value(value)
+        if not normalized_value:
+            continue
+        message_parts.append(f"{key}={normalized_value}")
+    return " ".join(message_parts)
+
+
+def log_tool_success(logger: logging.Logger, tool: str, **fields: Any) -> None:
+    """
+    输出统一格式的工具成功日志。
+    """
+
+    logger.info(_build_tool_log_message("success", tool, **fields))
+
+
+def log_tool_failure(logger: logging.Logger, tool: str, *, error: Any, **fields: Any) -> None:
+    """
+    输出统一格式的工具失败日志。
+    """
+
+    logger.info(_build_tool_log_message("failed", tool, error=error, **fields))
+
 class LoggerAdapter(logging.LoggerAdapter):
     """日志适配器，支持添加额外字段"""
     

@@ -41,6 +41,10 @@ public class RestfulResult {
         return new RestfulResult(code, message, null);
     }
 
+    public static RestfulResult error(int code, String message, Object data) {
+        return new RestfulResult(code, message, data);
+    }
+
 
     public static RestfulResult success(String message) {
         return success(message, null);

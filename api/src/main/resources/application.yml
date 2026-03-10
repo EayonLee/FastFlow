@@ -8,6 +8,10 @@ spring:
     # 默认使用 dev，可通过环境变量切换为 test/prod
     active: ${SPRING_PROFILES_ACTIVE:dev}
 
+nexus:
+  # Nexus 服务地址（供 API 模块代理调用）
+  base-url: ${NEXUS_BASE_URL:http://localhost:9090}
+
 auth:
   jwt:
     # 仅保留公共配置，secret 在各环境配置中声明

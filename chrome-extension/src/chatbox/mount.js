@@ -23,11 +23,22 @@ export class MountManager {
   }
 
   /**
+   * 当前 UI 是否已经挂载。
+   *
+   * 这里同时检查 `appInstance` 与宿主节点，避免出现“实例引用还在，但 DOM 已被页面重建移除”的假阳性。
+   */
+  isMounted() {
+    return Boolean(this.appInstance && document.getElementById(this.hostId))
+  }
+
+  /**
    * 初始化并挂载 Vue 应用
    */
   mount() {
+    if (this.isMounted()) return
+
     Logger.info('Initializing Vue UI...')
-    
+
     // 1. 清理可能存在的旧实例
     this.cleanup()
 
@@ -94,17 +105,17 @@ export class MountManager {
    * 清理实例
    */
   cleanup() {
+    if (this.appInstance) {
+      this.appInstance.unmount()
+      this.appInstance = null
+    }
+
     const existing = document.getElementById(this.hostId)
     if (existing) {
       Logger.info('Cleaning up old instance...')
       existing.remove()
     }
-    
-    if (this.appInstance) {
-      this.appInstance.unmount()
-      this.appInstance = null
-    }
-    
+
     this.hostElement = null
   }
 }
