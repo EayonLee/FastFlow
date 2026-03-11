@@ -1,4 +1,4 @@
-import { CONFIG } from '@/config/index.js'
+import { AUTH_CHECK_INTERVAL_MS } from '@config'
 import { AUTHORIZATION_KEY, authService } from '@/services/auth.js'
 import { cache } from '@/utils/cache.js'
 
@@ -12,7 +12,7 @@ import { cache } from '@/utils/cache.js'
 export function createAuthGuard(options = {}) {
   const {
     // 定时校验间隔，默认走配置
-    intervalMs = CONFIG.AUTH_CHECK_INTERVAL_MS,
+    intervalMs = AUTH_CHECK_INTERVAL_MS,
     // 登录态变化回调：true=已登录，false=未登录/过期
     onAuthedChange
   } = options

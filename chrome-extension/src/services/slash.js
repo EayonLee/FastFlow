@@ -1,5 +1,5 @@
 import { authService } from '@/services/auth.js'
-import { CONFIG } from '@/config/index.js'
+import { backendClient } from '@/services/backend-client.js'
 
 /**
  * 读取 Slash 目录（skills + mcp 占位）的服务模块。
@@ -20,13 +20,14 @@ import { CONFIG } from '@/config/index.js'
 async function getSlashCatalog() {
   // Authorization 由登录模块统一维护，这里只做透传。
   const token = await authService.getToken() || ''
-  const response = await fetch(`${CONFIG.API_BASE_URL}/fastflow/api/v1/clash/catalog`, {
+  const response = await backendClient.request({
+    service: 'api',
+    path: '/fastflow/api/v1/clash/catalog',
     method: 'GET',
     headers: { 'Authorization': token }
   })
 
-  // 只解析一次响应体，避免 “body stream already read” 错误。
-  const payload = await response.json().catch(() => null)
+  const payload = response.data
   if (!response.ok) {
     throw new Error(payload?.message || `Request failed with status ${response.status}`)
   }

@@ -1,4 +1,4 @@
-import { CONFIG } from '@/config/index.js'
+import { ELEMENT_SELECTORS } from '@config'
 
 /**
  * 判断节点是否“可见且可交互”。
@@ -24,7 +24,7 @@ function isVisibleCanvasElement(element) {
 function check() {
   // 必须命中“可见画布节点”才算在画布页。
   // 这样退出画布时会触发 mountManager.cleanup()，重新进入时会重新 mount（新会话）。
-  return CONFIG.ELEMENT_SELECTORS.some((selector) => {
+  return ELEMENT_SELECTORS.some((selector) => {
     const matchedElements = document.querySelectorAll(selector)
     for (const element of matchedElements) {
       if (isVisibleCanvasElement(element)) return true

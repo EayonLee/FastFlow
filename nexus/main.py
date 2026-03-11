@@ -1,5 +1,4 @@
 from fastapi import FastAPI
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
@@ -41,12 +40,6 @@ def create_app() -> FastAPI:
         lifespan=lifespan
     )
 
-    # 配置可信主机中间件
-    application.add_middleware(
-        TrustedHostMiddleware,
-        allowed_hosts=[settings.APP_HOST, "localhost", "127.0.0.1"]  # 允许的主机列表
-    )
-
     # 配置 CORS 中间件，允许 Chrome 插件访问
     application.add_middleware(
         CORSMiddleware,
@@ -72,6 +65,10 @@ app = create_app()
 def main() -> None:
     """
     应用程序主入口点, 配置并启动Uvicorn服务器
+
+    说明：
+    - `settings.APP_HOST` 仅用于 Uvicorn 的监听地址（bind host）。
+    - 不再用于 Trusted Host 白名单校验（该中间件已移除）。
     """
 
     # 启动信息

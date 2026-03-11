@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { authService } from '@/services/auth.js'
 import { useTheme } from '@/composables/useTheme.js'
+import { EXTENSION_VERSION_NAME } from '@config'
 import { 
   Moon, Sun, Monitor, 
   ChevronRight, Shield, Info, LogOut 
@@ -28,6 +29,8 @@ const firstLetter = computed(() => {
   const name = displayName.value
   return name ? name.charAt(0).toUpperCase() : 'U'
 })
+
+const extensionVersion = computed(() => `v${EXTENSION_VERSION_NAME}`)
 
 const handleLogout = () => {
   authService.logout()
@@ -97,7 +100,7 @@ const handleLogout = () => {
           <div class="icon-box"><Info size="16" /></div>
           <span class="label">关于版本</span>
         </div>
-        <span class="value-tag">v1.0.0</span>
+        <span class="value-tag">{{ extensionVersion }}</span>
       </div>
     </div>
 

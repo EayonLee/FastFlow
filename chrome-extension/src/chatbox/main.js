@@ -8,7 +8,6 @@
  * 这样在单页应用（SPA）里从画布页跳到其他页面时，不会出现右下角小球残留。
  */
 
-import { Bridge } from '@/services/bridge.js'
 import { Detector } from '@/utils/detector.js'
 import { Logger } from '@/utils/logger.js'
 import { mountManager } from './mount.js'
@@ -32,10 +31,10 @@ function syncMountState() {
 
     Logger.info(`在 [${env}] 中检测到编排画布，正在初始化...`)
 
-    // 1. 注入通信桥接脚本
-    Bridge.injectScript()
-
-    // 2. 初始化 UI
+    // 通信桥接脚本改为按需注入：
+    // - 启动阶段只挂载 UI，不再做预热注入
+    // - 真正导出工作流、读取元信息、无感渲染时再由 Bridge 触发注入
+    // 这样可以避免页面刚进入时因为宿主脚本尚未稳定而产生“预热超时”的无效报错
     mountManager.mount()
     return
   }

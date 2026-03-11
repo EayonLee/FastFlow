@@ -20,12 +20,18 @@ web/node_modules/
 web/dist/
 web/.npm-cache/
 chrome-extension/dist/
+chrome-extension/dist-dev/
+chrome-extension/dist-prod/
 chrome-extension/node_modules/
+chrome-extension/.env.prod
 
 # logs
 .logs/
 nexus/logs/
+nexus/.idea/
 api/logs/
+api/target/
+api/.idea/
 
 # OS noise
 .DS_Store

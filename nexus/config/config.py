@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     # 服务配置
     APP_NAME: str = "FastFlow-Nexus"
     APP_PORT: int = 9090
+    # 仅用于 Uvicorn 监听地址（bind host）。
+    # 示例：
+    # - 0.0.0.0: 监听所有网卡，允许外部访问
+    # - 127.0.0.1: 仅本机访问
+    # 注意：本项目已移除 TrustedHostMiddleware，APP_HOST 不再用于 Host Header 白名单校验。
     APP_HOST: str = "0.0.0.0"
     APP_VERSION: str = "1.0.0"
     

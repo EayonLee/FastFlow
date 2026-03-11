@@ -1,7 +1,6 @@
 import { authService } from '@/services/auth.js'
-import { CONFIG } from '@/config/index.js'
+import { backendClient } from '@/services/backend-client.js'
 import { Logger } from '@/utils/logger.js'
-import { createParser } from 'eventsource-parser'
 
 /**
  * 生成工作流（调用 Nexus 的流式接口）
@@ -18,7 +17,7 @@ import { createParser } from 'eventsource-parser'
  */
 async function generateWorkflow(params, onEvent, onComplete, onError) {
   let finalGraph = null
-  let streamErrorMessage = ''
+  let streamHandle = null
 
   try {
     // 读取登录凭证（Nexus 接口需要 Authorization）
@@ -36,112 +35,49 @@ async function generateWorkflow(params, onEvent, onComplete, onError) {
 
     // 发起请求（Nexus SSE 流式接口）
     const requestHeaders = { 'Content-Type': 'application/json', 'Authorization': token }
-    const response = await fetch(`${CONFIG.NEXUS_BASE_URL}/fastflow/nexus/v1/agent/chat/completions`, {
-      method: 'POST',
-      headers: requestHeaders,
-      body: JSON.stringify(body)
-    })
-    Logger.info('请求 Nexus Agent 详情', requestHeaders, body, response)
+    Logger.info('请求 Nexus Agent 详情', requestHeaders, body)
 
-    // 先读取后端错误（包含：非 2xx 或 2xx 但返回 JSON 错误体）
-    const backendMessage = await readBackendError(response)
-    if (backendMessage) {
-      // 统一包装为 Error，交给调用方显示后端 message
-      const error = new Error(backendMessage)
-      Logger.error('Request Nexus Error:', error)
-      onError(error)
-      return
-    }
-
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    const parser = createParser({
-      onEvent(sseEvent) {
-        const rawData = sseEvent?.data
-        if (!rawData || rawData === '[DONE]') return
-        try {
-          const event = JSON.parse(rawData)
-          if (onEvent) onEvent(event)
-          if (event.type === 'error') {
-            streamErrorMessage = event.message || event.error || 'Streaming error'
-          }
+    await new Promise((resolve, reject) => {
+      streamHandle = backendClient.stream({
+        service: 'nexus',
+        path: '/fastflow/nexus/v1/agent/chat/completions',
+        method: 'POST',
+        headers: requestHeaders,
+        body,
+        onEvent(event) {
+          onEvent?.(event)
           if (event.type === 'graph') {
             finalGraph = event.data
           }
-        } catch (e) {
-          // 单个 SSE 事件解析失败时跳过，避免阻塞整个流
+          if (event.type === 'error') {
+            reject(new Error(event.message || event.error || 'Streaming error'))
+          }
+        },
+        onComplete() {
+          if (finalGraph) {
+            onComplete(finalGraph)
+          } else if (params.mode === 'builder') {
+            onError(new Error('未收到 Nexus 返回的有效图数据'))
+          } else {
+            onComplete(null)
+          }
+          resolve()
+        },
+        onError(error) {
+          reject(error)
         }
-      }
+      })
     })
-
-    // 逐块读取 SSE 数据并交给第三方解析器处理
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) {
-        parser.feed(decoder.decode())
-        break
-      }
-      parser.feed(decoder.decode(value, { stream: true }))
-    }
-    
-    // SSE 结束后，优先处理流式错误
-    if (streamErrorMessage) {
-      onError(new Error(streamErrorMessage))
-      return
-    }
-
-    if (finalGraph) {
-      // 返回图结构（当前仅 builder 未来可能使用）
-      onComplete(finalGraph)
-    } else {
-      // Chat / Debug 不返回图；Builder 若未来启用且成功返回，应返回 graph。
-      if (params.mode === 'builder') {
-        onError(new Error('未收到 Nexus 返回的有效图数据'))
-      } else {
-        onComplete(null)
-      }
-    }
 
   } catch (err) {
     // 网络错误或解析异常
     Logger.error('Request Nexus Error:', err)
     onError(err)
+  } finally {
+    streamHandle?.close()
   }
 }
 
 export const Nexus = {
   generateWorkflow
-}
-
-async function readBackendError(response) {
-  // 非 2xx 直接解析错误信息
-  if (!response.ok) {
-    return await parseErrorResponse(response, `Request failed with status ${response.status}`)
-  }
-  // 2xx 但返回 JSON 错误体的场景（后端异常时可能出现）
-  const contentType = response.headers.get('content-type') || ''
-  if (!contentType.includes('application/json')) return ''
-  return await parseErrorResponse(response, '')
-}
-
-async function parseErrorResponse(response, fallback) {
-  try {
-    // 优先解析 JSON 格式的错误体
-    const errorJson = await response.json()
-    return (
-      errorJson?.message ||
-      errorJson?.detail?.message ||
-      (Array.isArray(errorJson?.detail) ? errorJson.detail.map(d => d?.msg).filter(Boolean).join('; ') : '') ||
-      errorJson?.detail ||
-      fallback
-    )
-  } catch (e) {
-    // JSON 解析失败则退回文本
-    try {
-      const text = await response.text()
-      return text || fallback
-    } catch (e2) {
-      return fallback
-    }
-  }
 }

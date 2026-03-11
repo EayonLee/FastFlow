@@ -1,10 +1,8 @@
 import { cache } from '@/utils/cache.js'
-import { CONFIG } from '@/config/index.js'
+import { backendClient } from '@/services/backend-client.js'
+import { PASSWORD_SECRET_KEY } from '@config'
 import CryptoJS from 'crypto-js'
 
-// 使用 config 中定义的 API_BASE_URL
-const BASE_URL = CONFIG.API_BASE_URL
-const PASSWORD_SECRET_KEY = CONFIG.PASSWORD_SECRET_KEY // 与后端保持一致
 export const AUTH_EXPIRED_EVENT = 'auth-expired'
 export const AUTHORIZATION_KEY = 'Authorization'
 export const USER_INFO_KEY = 'userInfo'
@@ -44,20 +42,22 @@ export const authService = {
       // 对密码进行加密
       const encryptedPassword = encryptPassword(password)
 
-      const response = await fetch(`${BASE_URL}/fastflow/api/v1/auth/login`, {
+      const response = await backendClient.request({
+        service: 'api',
+        path: '/fastflow/api/v1/auth/login',
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json' 
+        headers: {
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ 
+        body: {
           email: email, 
           password: encryptedPassword 
-        })
+        }
       })
-      
-      const result = await response.json()
-      
-      if (!response.ok || result.code !== 200) {
+
+      const result = response.data
+
+      if (!response.ok || !result || result.code !== 200) {
         throw buildApiError(result, '登录失败，请检查账号密码')
       }
       
@@ -87,7 +87,9 @@ export const authService = {
       throw err
     }
 
-    const response = await fetch(`${BASE_URL}/fastflow/api/v1/auth/checkLogin`, {
+    const response = await backendClient.request({
+      service: 'api',
+      path: '/fastflow/api/v1/auth/checkLogin',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -95,12 +97,7 @@ export const authService = {
       }
     })
 
-    let result = null
-    try {
-      result = await response.json()
-    } catch (e) {
-      // ignore json parse errors
-    }
+    const result = response.data || null
 
     if (!response.ok || (result && result.code !== 200)) {
       const err = new Error((result && result.message) || '登录状态已过期')
@@ -118,20 +115,22 @@ export const authService = {
   async register(data) {
     try {
       const encryptedPassword = encryptPassword(data.password)
-      const response = await fetch(`${BASE_URL}/fastflow/api/v1/auth/register`, {
+      const response = await backendClient.request({
+        service: 'api',
+        path: '/fastflow/api/v1/auth/register',
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
+        body: {
           username: data.username,
           email: data.email,
           password: encryptedPassword,
           inviteCode: data.inviteCode
-        })
+        }
       })
-      const result = await response.json()
-      if (!response.ok || result.code !== 200) {
+      const result = response.data
+      if (!response.ok || !result || result.code !== 200) {
         throw buildApiError(result, '注册失败')
       }
       return result.data

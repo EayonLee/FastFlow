@@ -5,6 +5,7 @@
  */
 import { X } from 'lucide-vue-next'
 import { computed } from 'vue'
+import { EXTENSION_VERSION_NAME } from '@config'
 
 const props = defineProps({
   showClose: {
@@ -17,13 +18,8 @@ const props = defineProps({
   },
 })
 
-// 从 manifest 获取版本号
 const version = computed(() => {
-  try {
-    return `v${chrome.runtime.getManifest().version}`
-  } catch (e) {
-    return 'Dev'
-  }
+  return `v${EXTENSION_VERSION_NAME}`
 })
 
 const emit = defineEmits(['close', 'title-click'])

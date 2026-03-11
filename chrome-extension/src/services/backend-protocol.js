@@ -1,0 +1,15 @@
+/**
+ * 后台请求层与前端页面之间的消息协议常量。
+ *
+ * 约束：
+ * - 普通 HTTP 请求走 `sendMessage`
+ * - 流式 Agent 请求走长连接 `Port`
+ * - 页面侧和 service worker 都必须复用这组常量，避免协议漂移
+ */
+export const FASTFLOW_HTTP_REQUEST = 'FASTFLOW_HTTP_REQUEST'
+export const FASTFLOW_HTTP_RESPONSE = 'FASTFLOW_HTTP_RESPONSE'
+export const FASTFLOW_STREAM_PORT = 'FASTFLOW_STREAM_PORT'
+export const FASTFLOW_STREAM_OPEN = 'FASTFLOW_STREAM_OPEN'
+export const FASTFLOW_STREAM_EVENT = 'FASTFLOW_STREAM_EVENT'
+export const FASTFLOW_STREAM_CLOSE = 'FASTFLOW_STREAM_CLOSE'
+export const FASTFLOW_STREAM_ERROR = 'FASTFLOW_STREAM_ERROR'

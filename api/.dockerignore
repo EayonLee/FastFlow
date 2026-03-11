@@ -1,0 +1,8 @@
+target/*
+!target/api-1.0-SNAPSHOT.jar
+.idea/
+*.iml
+sql/
+
+.git/
+.DS_Store
