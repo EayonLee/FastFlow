@@ -27,6 +27,18 @@ public class GlobalExceptionHandler {
 
 
     /**
+     * 处理邀请码业务异常
+     *
+     * @param e 邀请码业务异常
+     * @return RestfulResult 包含邀请码专属错误码和字段错误信息
+     */
+    @ExceptionHandler(BizInviteCodeException.class)
+    public RestfulResult handleBizInviteCodeException(BizInviteCodeException e) {
+        return RestfulResult.error(e.getCode(), e.getMessage(), Map.of("fieldErrors", e.getFieldErrors()));
+    }
+
+
+    /**
      * 处理业务异常
      *
      * @param e 业务异常

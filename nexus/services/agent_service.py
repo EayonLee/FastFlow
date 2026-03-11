@@ -32,6 +32,43 @@ class AgentService:
         payload["ts"] = datetime.now(timezone.utc).isoformat()
         return payload
 
+    async def _handle_disabled_agent_request(
+        self,
+        *,
+        agent: str,
+        message: str,
+        session_id: str,
+    ) -> AsyncGenerator[str, None]:
+        """
+        统一处理当前被禁用的智能体入口，保持固定的 SSE 事件顺序。
+        """
+        event_seq = 1
+        yield _to_sse(
+            self._enrich_event(
+                build_run_started_event(agent=agent),
+                session_id=session_id,
+                seq=event_seq,
+            )
+        )
+        event_seq += 1
+        logger.info("%s agent is disabled.", agent.capitalize())
+        yield _to_sse(
+            self._enrich_event(
+                {"type": "error", "message": message},
+                session_id=session_id,
+                seq=event_seq,
+            )
+        )
+        event_seq += 1
+        yield _to_sse(
+            self._enrich_event(
+                build_run_completed_event(final_answer_len=0),
+                session_id=session_id,
+                seq=event_seq,
+            )
+        )
+        yield SSE_DONE
+
     async def handle_chat_request(self, context: ChatRequestContext) -> AsyncGenerator[str, None]:
         """处理对话型智能体请求。"""
         event_seq = 1
@@ -68,30 +105,20 @@ class AgentService:
         """
         处理构建型智能体请求（保留入口，内部逻辑已清空）。
         """
-        event_seq = 1
-        session_id = context.session_id or ""
-        yield _to_sse(
-            self._enrich_event(
-                build_run_started_event(agent="builder"),
-                session_id=session_id,
-                seq=event_seq,
-            )
-        )
-        event_seq += 1
-        logger.info("BuilderAgent is disabled.")
-        yield _to_sse(
-            self._enrich_event(
-                {"type": "error", "message": "Builder agent is temporarily disabled"},
-                session_id=session_id,
-                seq=event_seq,
-            )
-        )
-        event_seq += 1
-        yield _to_sse(
-            self._enrich_event(
-                build_run_completed_event(final_answer_len=0),
-                session_id=session_id,
-                seq=event_seq,
-            )
-        )
-        yield SSE_DONE
+        async for chunk in self._handle_disabled_agent_request(
+            agent="builder",
+            message="Builder 智能体暂未开放 🚧，相关能力正在完善中，敬请期待 ✨",
+            session_id=context.session_id or "",
+        ):
+            yield chunk
+
+    async def handle_debug_request(self, context: ChatRequestContext) -> AsyncGenerator[str, None]:
+        """
+        处理调试型智能体请求（保留入口，内部逻辑已清空）。
+        """
+        async for chunk in self._handle_disabled_agent_request(
+            agent="debug",
+            message="Debug 智能体暂未开放 🛠️，调试能力正在完善中，敬请期待 ✨",
+            session_id=context.session_id or "",
+        ):
+            yield chunk

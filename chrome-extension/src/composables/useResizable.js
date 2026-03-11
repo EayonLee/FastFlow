@@ -1,156 +1,220 @@
 import { cache } from '@/utils/cache.js'
 
-// 默认尺寸与边距约束
-const DEFAULT_MIN_WIDTH = 360
-const DEFAULT_MIN_HEIGHT = 520
+export const DEFAULT_MIN_WIDTH = 360
+export const DEFAULT_MIN_HEIGHT = 520
 const DEFAULT_EDGE_PADDING = 60
 
-export function useResizable(containerRef, options = {}) {
-  // 最小尺寸与边距约束（避免拖出屏幕）
+function clampDimension(value, preferredMin, max) {
+  const safeMax = Math.max(0, max)
+  const safeMin = Math.min(preferredMin, safeMax)
+  return Math.min(safeMax, Math.max(safeMin, value))
+}
+
+function resolveAnchorSide(anchorSide, dir) {
+  if (anchorSide === 'left' || anchorSide === 'right') {
+    return anchorSide
+  }
+  return dir.includes('w') ? 'right' : 'left'
+}
+
+function computeHorizontalRect(startRect, deltaX, anchorSide, minWidth, edgePadding) {
+  if (anchorSide === 'left') {
+    const left = startRect.left
+    const maxWidth = window.innerWidth - edgePadding - left
+    const width = clampDimension(startRect.width + deltaX, minWidth, maxWidth)
+    return {
+      left,
+      width,
+      right: left + width
+    }
+  }
+
+  const right = startRect.right
+  const maxWidth = right - edgePadding
+  const width = clampDimension(startRect.width - deltaX, minWidth, maxWidth)
+  return {
+    left: right - width,
+    width,
+    right
+  }
+}
+
+function computeVerticalRect(startRect, deltaY, dir, minHeight, edgePadding) {
+  if (dir.includes('n')) {
+    const bottom = startRect.bottom
+    const maxHeight = bottom - edgePadding
+    const height = clampDimension(startRect.height - deltaY, minHeight, maxHeight)
+    return {
+      top: bottom - height,
+      height,
+      bottom
+    }
+  }
+
+  const top = startRect.top
+  const maxHeight = window.innerHeight - edgePadding - top
+  const height = clampDimension(startRect.height + deltaY, minHeight, maxHeight)
+  return {
+    top,
+    height,
+    bottom: top + height
+  }
+}
+
+function buildNextRect(resizeState, pointerEvent, minWidth, minHeight, edgePadding) {
+  const { startX, startY, startRect, dir, anchorSide } = resizeState
+  const deltaX = pointerEvent.clientX - startX
+  const deltaY = pointerEvent.clientY - startY
+  const horizontal = computeHorizontalRect(startRect, deltaX, anchorSide, minWidth, edgePadding)
+  const vertical = computeVerticalRect(startRect, deltaY, dir, minHeight, edgePadding)
+
+  return {
+    left: horizontal.left,
+    top: vertical.top,
+    width: horizontal.width,
+    height: vertical.height,
+    right: horizontal.right,
+    bottom: vertical.bottom
+  }
+}
+
+export function useResizable(options = {}) {
   const minWidth = options.minWidth ?? DEFAULT_MIN_WIDTH
   const minHeight = options.minHeight ?? DEFAULT_MIN_HEIGHT
   const edgePadding = options.edgePadding ?? DEFAULT_EDGE_PADDING
-  // 拖拽状态变化回调（用于 UI 表现）
+  const onResize = options.onResize
+  const onResizeEnd = options.onResizeEnd
   const onResizeStateChange = options.onResizeStateChange
-  // 缓存 key（用于记住尺寸）
   const storageKey = options.storageKey
 
-  // 拖拽中的临时状态
   let resizeState = null
-  // 使用 RAF 节流，提升拖拽流畅度
-  let rafId = null
-  // 最近一次 pointer 事件（用于 RAF 更新）
   let pendingEvent = null
+  let rafId = null
 
-  // 计算最大宽度：不超过视窗，保留边距
-  function getMaxWidth() {
-    return Math.max(minWidth, window.innerWidth - edgePadding)
-  }
-
-  // 计算最大高度：不超过视窗，保留边距
-  function getMaxHeight() {
-    return Math.max(minHeight, window.innerHeight - edgePadding)
-  }
-
-  // 通知外部当前是否正在拖拽
   function setResizing(active) {
-    if (!onResizeStateChange) return
-    onResizeStateChange(active)
+    if (typeof onResizeStateChange === 'function') {
+      onResizeStateChange(active)
+    }
   }
 
-  // 根据指针增量更新尺寸
-  function updateSize() {
+  function emitResize() {
     if (!resizeState || !pendingEvent) return
-    const { startX, startY, startWidth, startHeight, el, dir } = resizeState
-    const { clientX, clientY } = pendingEvent
-    const deltaX = clientX - startX
-    const deltaY = clientY - startY
-    // 方向标识：含 w/n 表示向左/向上拖动时尺寸增大
-    const widthSign = dir.includes('w') ? -1 : 1
-    const heightSign = dir.includes('n') ? -1 : 1
-    const nextWidth = startWidth + (deltaX * widthSign)
-    const nextHeight = startHeight + (deltaY * heightSign)
-    const width = Math.min(getMaxWidth(), Math.max(minWidth, nextWidth))
-    const height = Math.min(getMaxHeight(), Math.max(minHeight, nextHeight))
-    el.style.width = `${width}px`
-    el.style.height = `${height}px`
+    const nextRect = buildNextRect(resizeState, pendingEvent, minWidth, minHeight, edgePadding)
+    resizeState.lastRect = nextRect
+    if (typeof onResize === 'function') {
+      onResize(nextRect, {
+        dir: resizeState.dir,
+        anchorSide: resizeState.anchorSide
+      })
+    }
   }
 
-  // 将尺寸应用到容器（带最小/最大边界）
-  function applySize(el, size) {
-    if (!el || !size) return
-    const width = Math.min(getMaxWidth(), Math.max(minWidth, size.width || minWidth))
-    const height = Math.min(getMaxHeight(), Math.max(minHeight, size.height || minHeight))
-    el.style.width = `${width}px`
-    el.style.height = `${height}px`
-  }
-
-  // 从缓存中恢复尺寸
-  async function restoreSize() {
-    if (!storageKey) return
-    const el = containerRef.value
-    if (!el) return
-    const saved = await cache.get(storageKey)
-    if (!saved) return
-    applySize(el, saved)
-  }
-
-  // 将当前尺寸写入缓存
-  async function persistSize() {
-    if (!storageKey || !resizeState) return
-    const { el } = resizeState
-    if (!el) return
-    await cache.set(storageKey, {
-      width: el.offsetWidth,
-      height: el.offsetHeight
-    })
-  }
-
-  // 使用 RAF 节流拖拽更新，避免卡顿
-  function scheduleResize(e) {
-    pendingEvent = e
+  function scheduleResize(event) {
+    pendingEvent = event
     if (rafId) return
     rafId = window.requestAnimationFrame(() => {
       rafId = null
-      updateSize()
+      emitResize()
     })
   }
 
-  // 停止拖拽并保存尺寸
-  async function stopResize(e) {
+  async function persistSize(rect) {
+    if (!storageKey || !rect) return
+    await cache.set(storageKey, {
+      width: rect.width,
+      height: rect.height
+    })
+  }
+
+  async function stopResize(event) {
     if (!resizeState) return
-    const { handleEl } = resizeState
-    if (handleEl?.releasePointerCapture && e?.pointerId != null) {
+    const { handleEl, dir, anchorSide } = resizeState
+    if (handleEl?.releasePointerCapture && event?.pointerId != null) {
       try {
-        handleEl.releasePointerCapture(e.pointerId)
-      } catch (err) {
-        // ignore
+        handleEl.releasePointerCapture(event.pointerId)
+      } catch (error) {
+        // ignore release failures
       }
     }
+
     window.removeEventListener('pointermove', scheduleResize)
     window.removeEventListener('pointerup', stopResize)
-    await persistSize()
-    resizeState = null
-    pendingEvent = null
+
     if (rafId) {
       window.cancelAnimationFrame(rafId)
       rafId = null
     }
+
+    const finalRect = resizeState.lastRect || resizeState.startRect
+    await persistSize(finalRect)
+
+    if (typeof onResizeEnd === 'function') {
+      onResizeEnd(finalRect, { dir, anchorSide })
+    }
+
+    resizeState = null
+    pendingEvent = null
     setResizing(false)
   }
 
-  // 开始拖拽：记录起始尺寸与方向
-  function startResize(dir, e) {
-    const el = containerRef.value
-    if (!el) return
-    e.preventDefault()
-    e.stopPropagation()
+  function startResize(dir, event, context = {}) {
+    const rect = context.rect
+    if (!rect) return
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    const handleEl = event.currentTarget
+    const anchorSide = resolveAnchorSide(context.anchorSide, dir)
+    const startRect = {
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+      right: rect.right ?? rect.left + rect.width,
+      bottom: rect.bottom ?? rect.top + rect.height
+    }
+
     resizeState = {
-      el,
       dir,
-      handleEl: e.currentTarget,
-      startX: e.clientX,
-      startY: e.clientY,
-      startWidth: el.offsetWidth,
-      startHeight: el.offsetHeight
+      anchorSide,
+      handleEl,
+      startRect,
+      lastRect: startRect,
+      startX: event.clientX,
+      startY: event.clientY
     }
-    // 使用 pointer capture，保证拖拽过程不中断
-    if (resizeState.handleEl?.setPointerCapture && e.pointerId != null) {
-      resizeState.handleEl.setPointerCapture(e.pointerId)
+
+    if (handleEl?.setPointerCapture && event.pointerId != null) {
+      handleEl.setPointerCapture(event.pointerId)
     }
+
+    if (typeof onResize === 'function') {
+      onResize(startRect, { dir, anchorSide })
+    }
+
     window.addEventListener('pointermove', scheduleResize)
     window.addEventListener('pointerup', stopResize)
     setResizing(true)
   }
 
-  // 清理拖拽状态与监听
+  async function restoreSize() {
+    if (!storageKey) return null
+    const saved = await cache.get(storageKey)
+    if (!saved) return null
+    return {
+      width: Math.max(Number(saved.width) || minWidth, minWidth),
+      height: Math.max(Number(saved.height) || minHeight, minHeight)
+    }
+  }
+
   function cleanup() {
-    stopResize()
+    return stopResize()
   }
 
   return {
-    startResize,
+    cleanup,
     restoreSize,
-    cleanup
+    startResize
   }
 }

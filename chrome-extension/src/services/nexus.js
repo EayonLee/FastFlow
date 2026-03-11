@@ -6,7 +6,7 @@ import { createParser } from 'eventsource-parser'
 /**
  * 生成工作流（调用 Nexus 的流式接口）
  * @param {Object} params - 请求参数
- * @param {string} params.mode - 智能体类型（chat 或 builder）
+ * @param {string} params.mode - 智能体类型（chat / builder / debug）
  * @param {string} params.prompt - 用户输入的提示词
  * @param {string} params.sessionId - 会话 ID
  * @param {number} params.modelConfigId - 模型配置 ID（后端要求为数字）
@@ -91,10 +91,10 @@ async function generateWorkflow(params, onEvent, onComplete, onError) {
     }
 
     if (finalGraph) {
-      // Builder 成功：返回图结构
+      // 返回图结构（当前仅 builder 未来可能使用）
       onComplete(finalGraph)
     } else {
-      // Chat 不返回图；Builder 必须有图
+      // Chat / Debug 不返回图；Builder 若未来启用且成功返回，应返回 graph。
       if (params.mode === 'builder') {
         onError(new Error('未收到 Nexus 返回的有效图数据'))
       } else {

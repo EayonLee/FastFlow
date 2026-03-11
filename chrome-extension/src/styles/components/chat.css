@@ -10,8 +10,6 @@
 
 #fastflow-copilot-container {
   position: fixed;
-  bottom: 30px;
-  right: 30px;
   width: var(--chat-width);
   height: var(--chat-height);
   max-height: calc(100vh - 60px);
@@ -104,11 +102,17 @@
   pointer-events: all;
 }
 
+#fastflow-copilot-container.anchor-left {
+  transform-origin: left center;
+}
+
+#fastflow-copilot-container.anchor-right {
+  transform-origin: right center;
+}
+
 /* Toggle Button */
 #fastflow-toggle-btn {
   position: fixed;
-  bottom: 30px;
-  right: 30px;
   width: 50px;
   height: 50px;
   background: var(--bg-app);
@@ -123,6 +127,9 @@
 	  /* 同上：避免 theme 切换被 all/背景动画拖慢 */
 	  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
   color: var(--accent-neon);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 #fastflow-toggle-btn:hover {
@@ -130,6 +137,11 @@
   box-shadow: 0 8px 30px var(--accent-neon-hover);
   border-color: var(--accent-neon);
   background: var(--bg-panel);
+}
+
+#fastflow-toggle-btn.dragging {
+  transition: none;
+  transform: scale(1.04);
 }
 
 /* Inner Screen Interface */

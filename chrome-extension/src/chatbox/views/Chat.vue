@@ -1,6 +1,7 @@
 <script setup>
-import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { Bot, MessageSquare, Send, Copy, Check } from 'lucide-vue-next'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { Bot, Bug, MessageSquare, Send, Copy, Check } from 'lucide-vue-next'
+import { useDraggable, useStorage, useWindowSize } from '@vueuse/core'
 import FlowSelect from '@/components/FlowSelect.vue'
 import Header from '@/components/Header.vue'
 import MermaidViewer from '@/chatbox/components/MermaidViewer.vue'
@@ -9,7 +10,7 @@ import AgentAnswerContent from '@/chatbox/components/AgentAnswerContent.vue'
 import AgentThinkingPanel from '@/chatbox/components/AgentThinkingPanel.vue'
 import ProtocolComposer from '@/chatbox/components/ProtocolComposer.vue'
 import { useCopyFeedback } from '@/composables/useCopyFeedback.js'
-import { useResizable } from '@/composables/useResizable.js'
+import { DEFAULT_MIN_HEIGHT, DEFAULT_MIN_WIDTH, useResizable } from '@/composables/useResizable.js'
 import { useStreamTypewriter } from '@/composables/useStreamTypewriter.js'
 import { Bridge } from '@/services/bridge.js'
 import { Nexus } from '@/services/nexus.js'
@@ -26,6 +27,16 @@ import { themeManager } from '@/utils/themeManager.js'
 
 // 存储 key（用于记住聊天框尺寸）
 const CHAT_SIZE_STORAGE_KEY = 'chat_box_size'
+// 存储 key（用于记住悬浮球吸附位置，按站点 origin 隔离）
+const ANCHOR_STORAGE_KEY = `chat_floating_anchor_v1::${window.location.origin}`
+// 交互常量
+const FLOAT_MARGIN = 16
+const FLOAT_BUTTON_SIZE = 50
+const FLOAT_PANEL_GAP = 12
+const FLOAT_PANEL_MARGIN = 16
+const DEFAULT_PANEL_WIDTH = 500
+// 点击与拖拽判定阈值（像素）：小于该位移按点击处理，避免误触发拖拽
+const DRAG_ACTIVATION_THRESHOLD = 6
 // 默认欢迎语
 const WELCOME_MESSAGE = 'Hi！👋\n' +
     '我是 Nexus，FastFlow 工作流智能助手，可以随时帮你优化或讲解工作流。\n\n' +
@@ -53,8 +64,9 @@ const selectedModel = ref('')
 
 // 可选智能体列表
 const agents = [
-  { id: 'chat', label: 'Chat', icon: MessageSquare, color: '#00ff41' },
-  { id: 'builder', label: 'SOLO Builder', icon: Bot, color: '#c084fc' }
+  { id: 'chat', label: 'Deep Chat', icon: MessageSquare, color: '#00ff41' },
+  { id: 'builder', label: 'SOLO Builder', icon: Bot, color: '#c084fc' },
+  { id: 'debug', label: 'SOLO Debug', icon: Bug, color: '#f59e0b' }
 ]
 
 // 可选模型列表（由后端配置拉取）
@@ -80,6 +92,222 @@ const messagesContainer = ref(null)
 const protocolComposerRef = ref(null)
 // 聊天容器 DOM 引用，用于拖拽调整尺寸
 const containerRef = ref(null)
+// 悬浮球 DOM 引用（交由 VueUse useDraggable 管理）
+const toggleButtonRef = ref(null)
+
+// 视窗尺寸（响应式）
+const { width: viewportWidth, height: viewportHeight } = useWindowSize()
+
+// 默认锚点（右下角），top 表示小球 top 像素
+const defaultAnchorTop = Math.max(FLOAT_MARGIN, window.innerHeight - FLOAT_BUTTON_SIZE - FLOAT_MARGIN)
+const anchor = useStorage(
+  ANCHOR_STORAGE_KEY,
+  { side: 'right', top: defaultAnchorTop },
+  window.localStorage,
+  { mergeDefaults: true }
+)
+// 记录拖拽起点，用于区分“点击打开”和“拖拽移动”
+const dragStartPoint = ref({ x: 0, y: 0 })
+const dragActivated = ref(false)
+const suppressNextToggleClick = ref(false)
+
+function getBubbleSize() {
+  return toggleButtonRef.value?.offsetWidth || FLOAT_BUTTON_SIZE
+}
+
+function clampBubbleX(x) {
+  const size = getBubbleSize()
+  const minX = FLOAT_MARGIN
+  const maxX = Math.max(minX, viewportWidth.value - size - FLOAT_MARGIN)
+  return Math.min(maxX, Math.max(minX, x))
+}
+
+function clampBubbleY(y) {
+  const size = getBubbleSize()
+  const minY = FLOAT_MARGIN
+  const maxY = Math.max(minY, viewportHeight.value - size - FLOAT_MARGIN)
+  return Math.min(maxY, Math.max(minY, y))
+}
+
+function getAnchorXBySide(side) {
+  const size = getBubbleSize()
+  if (side === 'left') return FLOAT_MARGIN
+  return Math.max(FLOAT_MARGIN, viewportWidth.value - size - FLOAT_MARGIN)
+}
+
+function normalizeAnchor() {
+  const currentSide = anchor.value?.side === 'left' ? 'left' : 'right'
+  const currentTop = Number.isFinite(anchor.value?.top) ? anchor.value.top : defaultAnchorTop
+  anchor.value = {
+    side: currentSide,
+    top: clampBubbleY(currentTop)
+  }
+}
+
+function syncBubbleToAnchor() {
+  bubbleX.value = clampBubbleX(getAnchorXBySide(anchor.value.side))
+  bubbleY.value = clampBubbleY(anchor.value.top)
+}
+
+function snapAnchor(position) {
+  const clampedX = clampBubbleX(position.x)
+  const clampedY = clampBubbleY(position.y)
+  const side = clampedX + getBubbleSize() / 2 <= viewportWidth.value / 2 ? 'left' : 'right'
+  anchor.value = {
+    side,
+    top: clampedY
+  }
+  syncBubbleToAnchor()
+}
+
+const {
+  x: bubbleX,
+  y: bubbleY,
+  isDragging: isBubbleDragging
+} = useDraggable(toggleButtonRef, {
+  initialValue: {
+    x: getAnchorXBySide(anchor.value.side),
+    y: anchor.value.top
+  },
+  preventDefault: true,
+  stopPropagation: true,
+  onStart(position) {
+    dragStartPoint.value = { x: position.x, y: position.y }
+    dragActivated.value = false
+    suppressNextToggleClick.value = false
+  },
+  onMove(position) {
+    // 先做“点击/拖拽”判定：未达到阈值前不移动小球，避免点击时轻微抖动造成漂移。
+    if (!dragActivated.value) {
+      const dx = Math.abs(position.x - dragStartPoint.value.x)
+      const dy = Math.abs(position.y - dragStartPoint.value.y)
+      if (dx < DRAG_ACTIVATION_THRESHOLD && dy < DRAG_ACTIVATION_THRESHOLD) {
+        return
+      }
+      dragActivated.value = true
+      if (!suppressNextToggleClick.value) {
+        suppressNextToggleClick.value = true
+      }
+    }
+    bubbleX.value = clampBubbleX(position.x)
+    bubbleY.value = clampBubbleY(position.y)
+  },
+  onEnd(position) {
+    // 未激活拖拽表示本次是“点击”，不更新锚点，保持位置稳定。
+    if (!dragActivated.value) return
+    snapAnchor(position)
+  }
+})
+
+const toggleButtonStyle = computed(() => {
+  if (isBubbleDragging.value) {
+    return {
+      left: `${clampBubbleX(bubbleX.value)}px`,
+      top: `${clampBubbleY(bubbleY.value)}px`,
+      right: 'auto',
+      bottom: 'auto'
+    }
+  }
+
+  return {
+    left: `${getAnchorXBySide(anchor.value.side)}px`,
+    top: `${clampBubbleY(anchor.value.top)}px`,
+    right: 'auto',
+    bottom: 'auto'
+  }
+})
+
+function getDefaultPanelHeight() {
+  return Math.min(900, Math.max(DEFAULT_MIN_HEIGHT, viewportHeight.value - 60))
+}
+
+const panelWidth = ref(DEFAULT_PANEL_WIDTH)
+const panelHeight = ref(getDefaultPanelHeight())
+const panelBottomOffset = ref(0)
+const activeResizeRect = ref(null)
+
+function clampPanelDimension(value, preferredMin, max) {
+  const safeMax = Math.max(0, max)
+  const safeMin = Math.min(preferredMin, safeMax)
+  return Math.min(safeMax, Math.max(safeMin, value))
+}
+
+function getBubbleMetrics() {
+  const bubbleTop = clampBubbleY(anchor.value.top)
+  const bubbleSize = getBubbleSize()
+  const bubbleLeft = getAnchorXBySide(anchor.value.side)
+  return {
+    bubbleLeft,
+    bubbleSize,
+    bubbleTop,
+    bubbleBottom: bubbleTop + bubbleSize
+  }
+}
+
+function getPanelMaxWidth(side, bubbleLeft, bubbleSize) {
+  if (side === 'left') {
+    const fixedLeft = bubbleLeft + bubbleSize + FLOAT_PANEL_GAP
+    return viewportWidth.value - FLOAT_PANEL_MARGIN - fixedLeft
+  }
+  const fixedRight = bubbleLeft - FLOAT_PANEL_GAP
+  return fixedRight - FLOAT_PANEL_MARGIN
+}
+
+function buildIdlePanelRect(width = panelWidth.value, height = panelHeight.value, bottomOffset = panelBottomOffset.value) {
+  const { bubbleLeft, bubbleSize, bubbleBottom } = getBubbleMetrics()
+  const maxWidth = getPanelMaxWidth(anchor.value.side, bubbleLeft, bubbleSize)
+  const safeWidth = clampPanelDimension(width, DEFAULT_MIN_WIDTH, maxWidth)
+  const maxHeight = viewportHeight.value - (FLOAT_PANEL_MARGIN * 2)
+  const safeHeight = clampPanelDimension(height, DEFAULT_MIN_HEIGHT, maxHeight)
+  const preferredBottom = bubbleBottom + bottomOffset
+  const minBottom = FLOAT_PANEL_MARGIN + safeHeight
+  const maxBottom = viewportHeight.value - FLOAT_PANEL_MARGIN
+  const bottom = Math.min(maxBottom, Math.max(minBottom, preferredBottom))
+  const top = bottom - safeHeight
+
+  if (anchor.value.side === 'left') {
+    const left = bubbleLeft + bubbleSize + FLOAT_PANEL_GAP
+    return {
+      left,
+      top,
+      width: safeWidth,
+      height: safeHeight,
+      right: left + safeWidth,
+      bottom
+    }
+  }
+
+  const right = bubbleLeft - FLOAT_PANEL_GAP
+  return {
+    left: right - safeWidth,
+    top,
+    width: safeWidth,
+    height: safeHeight,
+    right,
+    bottom
+  }
+}
+
+function syncPanelGeometryToViewport() {
+  const rect = buildIdlePanelRect()
+  const { bubbleBottom } = getBubbleMetrics()
+  panelWidth.value = rect.width
+  panelHeight.value = rect.height
+  panelBottomOffset.value = rect.bottom - bubbleBottom
+  return rect
+}
+
+const chatContainerStyle = computed(() => {
+  const rect = activeResizeRect.value ?? buildIdlePanelRect()
+  return {
+    left: `${rect.left}px`,
+    top: `${rect.top}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
+    right: 'auto',
+    bottom: 'auto'
+  }
+})
 
 // 主题切换时让已渲染 Mermaid 图同步换色（避免“背景切了但图还是旧主题”）
 useMermaidThemeSync(messagesContainer)
@@ -88,13 +316,40 @@ const sessionId = ref(generateUuid32())
 // 是否正在拖拽尺寸（用于样式表现）
 const isResizing = ref(false)
 // 拖拽尺寸逻辑（含缓存）
-const resizer = useResizable(containerRef, {
+const resizer = useResizable({
+  edgePadding: FLOAT_PANEL_MARGIN,
+  minHeight: DEFAULT_MIN_HEIGHT,
+  minWidth: DEFAULT_MIN_WIDTH,
   onResizeStateChange: (val) => {
     isResizing.value = val
+  },
+  onResize: (rect) => {
+    activeResizeRect.value = rect
+  },
+  onResizeEnd: (rect, meta) => {
+    const { bubbleBottom } = getBubbleMetrics()
+    activeResizeRect.value = null
+    panelWidth.value = rect.width
+    panelHeight.value = rect.height
+    if (meta.dir.includes('s')) {
+      panelBottomOffset.value = rect.bottom - bubbleBottom
+    }
+    syncPanelGeometryToViewport()
   },
   // 聊天框大小缓存key
   storageKey: CHAT_SIZE_STORAGE_KEY
 })
+
+function getCurrentPanelRect() {
+  return activeResizeRect.value ?? buildIdlePanelRect()
+}
+
+function handleResizeStart(dir, event) {
+  resizer.startResize(dir, event, {
+    anchorSide: anchor.value.side,
+    rect: getCurrentPanelRect()
+  })
+}
 
 // 流式打字机渲染（将 chunk 按字符节奏展示）
 const streamTypewriter = useStreamTypewriter({
@@ -292,8 +547,38 @@ watch(isAuthed, async (val) => {
   // 登录后：加载模型配置并恢复尺寸
   loadModelConfigs()
   await nextTick()
-  resizer.restoreSize()
+  normalizeAnchor()
+  syncBubbleToAnchor()
+  const restoredSize = await resizer.restoreSize()
+  if (restoredSize) {
+    panelWidth.value = restoredSize.width
+    panelHeight.value = restoredSize.height
+  } else {
+    panelWidth.value = DEFAULT_PANEL_WIDTH
+    panelHeight.value = getDefaultPanelHeight()
+  }
+  panelBottomOffset.value = 0
+  syncPanelGeometryToViewport()
 })
+
+watch([viewportWidth, viewportHeight], () => {
+  normalizeAnchor()
+  if (!isBubbleDragging.value) {
+    syncBubbleToAnchor()
+  }
+  if (!isResizing.value) {
+    syncPanelGeometryToViewport()
+  }
+})
+
+watch(
+  [() => anchor.value.side, () => anchor.value.top],
+  () => {
+    if (!isResizing.value) {
+      syncPanelGeometryToViewport()
+    }
+  }
+)
 
 // 拉取模型配置并设置默认模型
 async function loadModelConfigs() {
@@ -315,6 +600,11 @@ async function loadModelConfigs() {
 
 // 切换聊天窗口显示状态
 function toggleChat() {
+  // 拖拽结束后的“幽灵点击”直接吞掉，避免误打开
+  if (suppressNextToggleClick.value) {
+    suppressNextToggleClick.value = false
+    return
+  }
   isOpen.value = !isOpen.value
   if (isOpen.value) {
     // 展开时滚动到底部并聚焦输入框
@@ -439,8 +729,10 @@ async function handleGenerate() {
   const snapshot = getComposerSnapshot()
   const prompt = snapshot.prompt.trim()
   if (!prompt) return
-  // 2) 校验模型配置
-  if (!selectedModel.value) {
+  const isChatAgent = selectedAgent.value === 'chat'
+
+  // 2) Chat 模式需要模型配置；Builder / Debug 统一交由 Nexus 返回禁用态消息。
+  if (isChatAgent && !selectedModel.value) {
     addMessage('当前没有可用的模型配置，请先在系统中配置模型。', 'ai')
     return
   }
@@ -464,7 +756,7 @@ async function handleGenerate() {
         {
           id: `boot-${Date.now()}`,
           type: 'phase.started',
-          message: '等待模型分析用户问题',
+          message: '等待智能体处理用户问题',
           status: 'running',
           elapsedMs: null,
           ts: ''
@@ -474,23 +766,24 @@ async function handleGenerate() {
   )
   scrollToBottom()
 
-  const isChatAgent = selectedAgent.value === 'chat'
-  // 5) 所有模式都导出当前工作流配置原文，并从 DOM 读取当前工作流名称/描述
+  // 5) 仅 Chat 模式需要导出当前工作流配置与元信息。
   let workflowGraph = null
   let workflowMeta = null
-  try {
-    workflowGraph = await Bridge.exportWorkflowGraph()
+  if (isChatAgent) {
     try {
-      workflowMeta = await Bridge.exportWorkflowMeta()
-    } catch (metaErr) {
-      console.warn('[FastFlow] Export workflow meta failed:', metaErr)
-      workflowMeta = null
+      workflowGraph = await Bridge.exportWorkflowGraph()
+      try {
+        workflowMeta = await Bridge.exportWorkflowMeta()
+      } catch (metaErr) {
+        console.warn('[FastFlow] Export workflow meta failed:', metaErr)
+        workflowMeta = null
+      }
+    } catch (e) {
+      setMessageError(loadingMsgId, `Export current workflow graph failed：${e.message}`)
+      // 终止本次发送
+      isLoading.value = false
+      return
     }
-  } catch (e) {
-    setMessageError(loadingMsgId, `Export current workflow graph failed：${e.message}`)
-    // 终止本次发送
-    isLoading.value = false
-    return
   }
 
   // 6) 调用 Nexus（SSE 流式）
@@ -499,7 +792,7 @@ async function handleGenerate() {
       // 请求参数：prompt + 选中的 agent + 模型 + 会话 + 当前画布
       prompt,
       mode: selectedAgent.value,
-      modelConfigId: selectedModel.value,
+      modelConfigId: isChatAgent ? selectedModel.value : null,
       sessionId: sessionId.value,
       workflowGraph,
       workflowMeta
@@ -612,6 +905,9 @@ async function handleGenerate() {
       v-if="isAuthed"
       v-show="!isOpen"
       id="fastflow-toggle-btn"
+      ref="toggleButtonRef"
+      :class="[{ dragging: isBubbleDragging }]"
+      :style="toggleButtonStyle"
       @click="toggleChat"
     >
       <MessageSquare size="24" />
@@ -621,7 +917,14 @@ async function handleGenerate() {
     <div 
       v-if="isAuthed"
       id="fastflow-copilot-container" 
-      :class="{ active: isOpen, resizing: isResizing, 'mermaid-viewer-open': mermaidViewerOpen }"
+      :class="{
+        active: isOpen,
+        resizing: isResizing,
+        'mermaid-viewer-open': mermaidViewerOpen,
+        'anchor-left': anchor.side === 'left',
+        'anchor-right': anchor.side === 'right'
+      }"
+      :style="chatContainerStyle"
       ref="containerRef"
     >
       <div class="chat-main-interface">
@@ -770,10 +1073,10 @@ async function handleGenerate() {
           </div>
         </div>
       </div>
-      <div class="resize-handle nw" @pointerdown="resizer.startResize('nw', $event)"></div>
-      <div class="resize-handle ne" @pointerdown="resizer.startResize('ne', $event)"></div>
-      <div class="resize-handle sw" @pointerdown="resizer.startResize('sw', $event)"></div>
-      <div class="resize-handle se" @pointerdown="resizer.startResize('se', $event)"></div>
+      <div class="resize-handle nw" @pointerdown="handleResizeStart('nw', $event)"></div>
+      <div class="resize-handle ne" @pointerdown="handleResizeStart('ne', $event)"></div>
+      <div class="resize-handle sw" @pointerdown="handleResizeStart('sw', $event)"></div>
+      <div class="resize-handle se" @pointerdown="handleResizeStart('se', $event)"></div>
     </div>
   </div>
 </template>

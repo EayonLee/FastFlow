@@ -8,6 +8,7 @@ import cn.hutool.jwt.JWTUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fastflow.common.exception.BusinessException;
 import com.fastflow.common.exception.ErrorCode;
+import com.fastflow.service.invite.InviteCodeService;
 import com.fastflow.entity.user.User;
 import com.fastflow.entity.auth.LoginDTO;
 import com.fastflow.entity.auth.LoginVO;
@@ -41,11 +42,17 @@ import cn.hutool.crypto.symmetric.AES;
 @Slf4j
 @Service
 public class AuthService {
-    private static final String INVITE_CODE = "666666";
+    /**
+     * 注册密码规则：
+     * 仅允许大小写字母、数字和 _-@!#$%&*，长度 6~22。
+     */
     private static final String PASSWORD_REGEX = "^[A-Za-z0-9_@!#$%&*\\-]{6,22}$";
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private InviteCodeService inviteCodeService;
 
     @Value("${auth.jwt.secret}")
     private String jwtSecret;
@@ -55,10 +62,6 @@ public class AuthService {
 
     @Value("${auth.password.secret-key}")
     private String aesKey;
-
-    private BusinessException fieldError(int code, String message, String field, String fieldMessage) {
-        return new BusinessException(code, message, Map.of(field, fieldMessage));
-    }
 
     /**
      * 解密密码
@@ -73,20 +76,27 @@ public class AuthService {
             return aes.decryptStr(encryptedPassword);
         } catch (Exception e) {
             log.error("密码解密失败", e);
-            throw fieldError(ErrorCode.PARAM_ERROR.getCode(), "密码解密失败，请检查加密方式", "password", "密码格式错误，请重试");
+            throw new BusinessException(
+                    ErrorCode.PARAM_ERROR.getCode(),
+                    "密码解密失败，请检查加密方式",
+                    Map.of("password", "密码格式错误，请重试")
+            );
         }
     }
 
     private void validateDecryptedPassword(String password) {
         if (StrUtil.isBlank(password)) {
-            throw fieldError(ErrorCode.PARAM_ERROR.getCode(), "参数错误", "password", "密码不能为空");
-        }
-        if (!password.matches(PASSWORD_REGEX)) {
-            throw fieldError(
+            throw new BusinessException(
                     ErrorCode.PARAM_ERROR.getCode(),
                     "参数错误",
-                    "password",
-                    "密码仅支持大小写英文、数字和 _-@!#$%&*，长度为6-22位"
+                    Map.of("password", "密码不能为空")
+            );
+        }
+        if (!password.matches(PASSWORD_REGEX)) {
+            throw new BusinessException(
+                    ErrorCode.PARAM_ERROR.getCode(),
+                    "参数错误",
+                    Map.of("password", "密码仅支持大小写英文、数字和 _-@!#$%&*，长度为6-22位")
             );
         }
     }
@@ -149,71 +159,80 @@ public class AuthService {
     public RegisterVO register(RegisterDTO request) {
         log.info("开始处理用户注册请求: username={}, email={}", request.getUsername(), request.getEmail());
 
-        if (!INVITE_CODE.equals(request.getInviteCode())) {
-            throw fieldError(
-                    ErrorCode.USER_INVITE_CODE_INVALID.getCode(),
-                    ErrorCode.USER_INVITE_CODE_INVALID.getMessage(),
-                    "inviteCode",
-                    "邀请码不正确"
-            );
-        }
+        // 1) 先校验邀请码是否可用（存在且未使用）。
+        // 说明：这里是前置校验，后续仍会通过条件更新做并发安全校验。
+        inviteCodeService.validateInviteCode(request.getInviteCode());
 
-        // 1. 检查邮箱是否存在
+        // 2) 检查邮箱是否存在
         long emailCount = userService.count(new LambdaQueryWrapper<User>()
                 .eq(User::getEmail, request.getEmail()));
         if (emailCount > 0) {
             log.warn("注册失败，邮箱已存在: {}", request.getEmail());
-            throw fieldError(
+            throw new BusinessException(
                     ErrorCode.USER_EMAIL_ALREADY_EXISTS.getCode(),
                     ErrorCode.USER_EMAIL_ALREADY_EXISTS.getMessage(),
-                    "email",
-                    "该邮箱已被注册"
+                    Map.of("email", "该邮箱已被注册")
             );
         }
 
-        // 2. 创建用户
-        User user = new User();
-        user.setUsername(request.getUsername());
-        user.setEmail(request.getEmail());
-
-        // 3. 解密并校验密码强度
+        // 3) 解密并校验密码强度
         String realPassword = decryptPassword(request.getPassword());
         validateDecryptedPassword(realPassword);
 
-        // 4. 密码加密存储
+        // 4) 预先生成可用 UID（避免邀请码消耗后再做复杂重试）
+        Long uid = generateAvailableUid();
+
+        // 5) 先将邀请码标记为已使用。
+        // 关键点：register 方法本身有事务，若后续任一步失败（例如用户保存失败），
+        // 本次邀请码更新会随事务一起回滚，保证“要么都成功，要么都失败”。
+        inviteCodeService.consumeInviteCode(request.getInviteCode(), uid);
+
+        // 6) 创建用户并落库
+        User user = new User();
+        user.setUid(uid);
+        user.setUsername(request.getUsername());
+        user.setEmail(request.getEmail());
         user.setPassword(BCrypt.hashpw(realPassword));
         user.setStatus(1); // 1-正常
 
-        // 5. 保存用户（解决并发UID重复问题）
-        int maxRetries = 5;
-        for (int i = 0; i < maxRetries; i++) {
-            try {
-                // 生成9位随机数字UID (100000000 - 999999999)
-                user.setUid(RandomUtil.randomLong(100000000, 999999999));
-                userService.save(user);
-                break;
-            } catch (DuplicateKeyException e) {
-                if (userService.count(new LambdaQueryWrapper<User>().eq(User::getEmail, request.getEmail())) > 0) {
-                    throw fieldError(
-                            ErrorCode.USER_EMAIL_ALREADY_EXISTS.getCode(),
-                            ErrorCode.USER_EMAIL_ALREADY_EXISTS.getMessage(),
-                            "email",
-                            "该邮箱已被注册"
-                    );
-                }
-                // 如果是最后一次重试，仍然失败，则抛出异常
-                if (i == maxRetries - 1) {
-                    log.error("用户注册生成UID重试失败: username={}", request.getUsername(), e);
-                    throw new BusinessException(ErrorCode.SYSTEM_ERROR);
-                }
-                log.warn("UID生成冲突，正在重试: username={}, uid={}", request.getUsername(), user.getUid());
+        try {
+            userService.save(user);
+        } catch (DuplicateKeyException e) {
+            if (userService.count(new LambdaQueryWrapper<User>().eq(User::getEmail, request.getEmail())) > 0) {
+                throw new BusinessException(
+                        ErrorCode.USER_EMAIL_ALREADY_EXISTS.getCode(),
+                        ErrorCode.USER_EMAIL_ALREADY_EXISTS.getMessage(),
+                        Map.of("email", "该邮箱已被注册")
+                );
             }
+            log.error("用户注册失败: UID或唯一键冲突, uid={}, username={}", uid, request.getUsername(), e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
         }
 
         log.info("用户注册成功: uid={}, username={}", user.getUid(), user.getUsername());
 
-        // 6. 返回VO
+        // 7) 返回VO
         return BeanUtil.copyProperties(user, RegisterVO.class);
+    }
+
+    /**
+     * 生成一个当前可用的 9 位随机 UID。
+     * 说明：
+     * 1. 先做存在性检测，降低后续写库冲突概率；
+     * 2. 最终唯一性仍由数据库主键约束兜底。
+     */
+    private Long generateAvailableUid() {
+        int maxAttempts = 20;
+        for (int i = 0; i < maxAttempts; i++) {
+            long candidateUid = RandomUtil.randomLong(100000000, 999999999);
+            boolean exists = userService.count(
+                    new LambdaQueryWrapper<User>().eq(User::getUid, candidateUid)
+            ) > 0;
+            if (!exists) {
+                return candidateUid;
+            }
+        }
+        throw new BusinessException(ErrorCode.SYSTEM_ERROR.getCode(), "用户ID生成失败，请重试");
     }
 
     /**

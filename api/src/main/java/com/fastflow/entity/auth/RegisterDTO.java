@@ -18,7 +18,5 @@ public class RegisterDTO {
     @Pattern(regexp = "^[a-zA-Z0-9._%+-]+@360\\.cn$", message = "邮箱格式不正确，且必须是 @360.cn 邮箱")
     private String email;
 
-    @NotBlank(message = "邀请码不能为空")
-    @Pattern(regexp = "^[A-Za-z0-9]{6}$", message = "邀请码必须是6位字母或数字")
     private String inviteCode;
 }
