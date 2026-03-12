@@ -23,6 +23,6 @@ class ChatRequestContext(BaseModel):
     workflow_graph: Optional[WorkflowGraph] = Field(None, description="当前工作流图结构（支持对象或导出 JSON 字符串）")
     workflow_meta: Optional[WorkflowMeta] = Field(None, description="工作流元信息（名称、描述）")
     model_config_id: Optional[int] = Field(None, description="模型配置 ID")
-    mode: str = Field("chat", description="Agent 类型: 'chat'、'builder' 或 'debug'")
+    mode: str = Field("chat", description="Agent 类型: 'chat'、'builder' 或 'debug'（SOLO Debugger）")
     session_id: Optional[str] = Field(None, description="会话 ID")
     auth_token: Optional[str] = Field(None, description="用户认证 Token", exclude=True)

@@ -112,13 +112,13 @@ class AgentService:
         ):
             yield chunk
 
-    async def handle_debug_request(self, context: ChatRequestContext) -> AsyncGenerator[str, None]:
+    async def handle_debugger_request(self, context: ChatRequestContext) -> AsyncGenerator[str, None]:
         """
-        处理调试型智能体请求（保留入口，内部逻辑已清空）。
+        处理 Debugger 智能体请求（保留入口，内部逻辑已清空）。
         """
         async for chunk in self._handle_disabled_agent_request(
             agent="debug",
-            message="Debug 智能体暂未开放 🛠️，调试能力正在完善中，敬请期待 ✨",
+            message="SOLO Debugger 智能体暂未开放 🛠️，调试能力正在完善中，敬请期待 ✨",
             session_id=context.session_id or "",
         ):
             yield chunk

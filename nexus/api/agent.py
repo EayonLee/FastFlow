@@ -43,7 +43,7 @@ async def chat_completions(
     """
     统一的智能体对话接口 
     支持流式响应
-    根据 context.mode ("chat" | "builder" | "debug") 分流处理不同智能体类型的请求。
+    根据 context.mode ("chat" | "builder" | "debugger") 分流处理不同智能体类型的请求。
     """
     context.auth_token = request.headers.get("Authorization")
     # 登录校验
@@ -53,11 +53,11 @@ async def chat_completions(
         raise AuthError("Current user is not logged in")
 
     # 校验 mode 是否有效
-    if context.mode not in ["chat", "builder", "debug"]:
+    if context.mode not in ["chat", "builder", "debugger"]:
         logger.error("Invalid agent mode: %s", context.mode)
         raise ParmasValidationError(f"Invalid agent mode: {context.mode}")
 
-    # Chat 模式需要模型配置；Builder / Debug 当前为禁用入口，由后端返回固定提示。
+    # Chat 模式需要模型配置；Builder / Debugger 当前为禁用入口，由后端返回固定提示。
     if context.mode == "chat" and not context.model_config_id:
         raise ParmasValidationError("model_config_id is required")
     
@@ -90,9 +90,9 @@ async def chat_completions(
                 headers=SSE_RESPONSE_HEADERS,
             )
 
-        # Debug Agent
+        # Debugger Agent
         return StreamingResponse(
-            _safe_stream(agent_service.handle_debug_request(context), context.session_id),
+            _safe_stream(agent_service.handle_debugger_request(context), context.session_id),
             media_type="text/event-stream",
             headers=SSE_RESPONSE_HEADERS,
         )

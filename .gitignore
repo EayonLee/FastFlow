@@ -20,10 +20,9 @@ web/node_modules/
 web/dist/
 web/.npm-cache/
 chrome-extension/dist/
-chrome-extension/dist-dev/
-chrome-extension/dist-prod/
+chrome-extension/.wxt/
 chrome-extension/node_modules/
-chrome-extension/.env.prod
+chrome-extension/.env*.local
 
 # logs
 .logs/

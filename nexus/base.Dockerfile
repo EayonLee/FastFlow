@@ -15,12 +15,10 @@ ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
 ARG PIP_EXTRA_INDEX_URL=https://pypi.org/simple
 ARG INSTALL_UNSTRUCTURED=0
 
-# 创建最小权限运行账号（业务镜像可直接复用）
+# 创建最小权限运行账号
 RUN groupadd --system fastflow && useradd --system --gid fastflow --create-home --home-dir /home/fastflow fastflow
 
 # 预装 Python 运行时依赖：
-# 1) 剔除纯开发依赖（pytest/black/isort）
-# 2) unstructured 默认不装（体积大、下载慢），按需用 INSTALL_UNSTRUCTURED=1 开启
 COPY requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,id=fastflow-nexus-base-pip,target=/root/.cache/pip,sharing=locked \
     set -eux; \
@@ -36,4 +34,3 @@ RUN --mount=type=cache,id=fastflow-nexus-base-pip,target=/root/.cache/pip,sharin
       --extra-index-url "${PIP_EXTRA_INDEX_URL}" \
       --trusted-host "${PIP_TRUSTED_HOST}"; \
     rm -f /tmp/requirements.txt /tmp/requirements.runtime.base.txt /tmp/requirements.runtime.txt
-

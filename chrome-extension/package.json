@@ -1,12 +1,17 @@
 {
-  "name": "fastflow-chrome-extension",
+  "name": "fastflow",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "npm run build:prod",
-    "build:dev": "vite build --mode dev",
-    "build:prod": "vite build --mode prod",
-    "watch:dev": "vite build --watch --mode dev"
+    "postinstall": "wxt prepare",
+    "dev": "wxt",
+    "dev:chrome": "wxt --browser chrome",
+    "watch": "wxt --browser chrome --mode development",
+    "build:dev": "wxt build --browser chrome --mode development",
+    "build:prod": "wxt build --browser chrome --mode production",
+    "zip:prod": "wxt zip --browser chrome --mode production",
+    "clean": "rm -rf dist && wxt clean",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@tiptap/core": "^2.12.0",
@@ -26,9 +31,11 @@
     "vue": "^3.4.21"
   },
   "devDependencies": {
-    "@crxjs/vite-plugin": "^2.0.0-beta.33",
     "@types/node": "^25.2.0",
-    "@vitejs/plugin-vue": "^5.0.4",
-    "vite": "^5.1.6"
+    "@wxt-dev/module-vue": "^1.0.3",
+    "terser": "^5.46.0",
+    "typescript": "^5.9.3",
+    "vue-tsc": "^3.2.5",
+    "wxt": "^0.20.18"
   }
 }
