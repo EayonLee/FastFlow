@@ -15,7 +15,7 @@ nexus:
 auth:
   jwt:
     # 仅保留公共配置，secret 在各环境配置中声明
-    expiration: ${AUTH_JWT_EXPIRATION:3600} # 1小时 (1 * 60 * 60)
+    expiration: ${AUTH_JWT_EXPIRATION:604800} # 7天
 
 mybatis-plus:
   configuration:
