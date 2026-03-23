@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # - 127.0.0.1: 仅本机访问
     # 注意：本项目已移除 TrustedHostMiddleware，APP_HOST 不再用于 Host Header 白名单校验。
     APP_HOST: str = "0.0.0.0"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "1.0.1"
     
     # FastFlow Nexus 服务端配置
     FASTFLOW_API_URL: str = "http://localhost:8080"

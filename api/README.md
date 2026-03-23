@@ -68,7 +68,7 @@ mvn clean package     # 打包产物
 ```bash
 cd api
 mvn clean package
-java -jar target/api-1.0-SNAPSHOT.jar
+java -jar target/api-1.0.1.jar
 ```
 
 ## 配置方式
@@ -187,7 +187,7 @@ mvn clean package
 说明：
 
 - 容器默认暴露 `8080`
-- 运行产物固定为 `target/api-1.0-SNAPSHOT.jar`
+- 运行产物固定为 `target/api-1.0.1.jar`
 - 镜像支持通过 `/app/config` 额外挂载配置
 
 ## 当前状态
