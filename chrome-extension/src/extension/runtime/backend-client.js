@@ -8,6 +8,10 @@ import {
   FASTFLOW_STREAM_PORT
 } from './backend-protocol.js'
 
+const BACKGROUND_RETRY_DELAY_MS = 150
+const BACKGROUND_UNAVAILABLE_MESSAGE =
+  '扩展后台 service worker 未就绪，请在 chrome://extensions 中重新加载 FastFlow 扩展后重试'
+
 /**
  * 检查当前运行环境是否具备扩展运行时。
  *
@@ -47,6 +51,50 @@ function buildRuntimeError(fallbackMessage) {
   return new Error(runtimeError?.message || fallbackMessage)
 }
 
+function isMissingReceiverError(error) {
+  const message = String(error?.message || '')
+  return message.includes('Receiving end does not exist')
+}
+
+function buildBackgroundUnavailableError(rawMessage) {
+  const error = new Error(BACKGROUND_UNAVAILABLE_MESSAGE)
+  error.code = 'FASTFLOW_BACKGROUND_UNAVAILABLE'
+  error.rawMessage = rawMessage
+  return error
+}
+
+function wait(ms) {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms))
+}
+
+async function sendRuntimeMessage(message, { retryOnMissingReceiver = false } = {}) {
+  let retried = false
+
+  while (true) {
+    try {
+      return await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(message, (response) => {
+          if (chrome.runtime?.lastError) {
+            reject(buildRuntimeError('后台服务请求失败'))
+            return
+          }
+          resolve(response)
+        })
+      })
+    } catch (error) {
+      if (retryOnMissingReceiver && !retried && isMissingReceiverError(error)) {
+        retried = true
+        await wait(BACKGROUND_RETRY_DELAY_MS)
+        continue
+      }
+      if (isMissingReceiverError(error)) {
+        throw buildBackgroundUnavailableError(error.message)
+      }
+      throw error
+    }
+  }
+}
+
 /**
  * 页面侧唯一的后端客户端。
  *
@@ -67,21 +115,13 @@ export const backendClient = {
       timeoutMs
     }
 
-    const response = await new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage(
-        {
-          type: FASTFLOW_HTTP_REQUEST,
-          payload
-        },
-        (message) => {
-          if (chrome.runtime?.lastError) {
-            reject(buildRuntimeError('后台服务请求失败'))
-            return
-          }
-          resolve(message)
-        }
-      )
-    })
+    const response = await sendRuntimeMessage(
+      {
+        type: FASTFLOW_HTTP_REQUEST,
+        payload
+      },
+      { retryOnMissingReceiver: true }
+    )
 
     if (!response || response.type !== FASTFLOW_HTTP_RESPONSE) {
       throw new Error('后台服务返回了未知响应')
@@ -94,13 +134,27 @@ export const backendClient = {
     ensureChromeRuntime()
 
     // 流式请求需要长期保持通道，因此改用 Port，而不是一次性 sendMessage。
-    const port = chrome.runtime.connect({ name: FASTFLOW_STREAM_PORT })
+    let port = null
     let isClosed = false
 
     const close = () => {
       if (isClosed) return
       isClosed = true
-      port.disconnect()
+      port?.disconnect()
+    }
+
+    try {
+      port = chrome.runtime.connect({ name: FASTFLOW_STREAM_PORT })
+    } catch (error) {
+      isClosed = true
+      const normalizedError =
+        isMissingReceiverError(error)
+          ? buildBackgroundUnavailableError(error.message)
+          : error instanceof Error
+            ? error
+            : new Error('扩展后台服务不可用')
+      onError?.(normalizedError)
+      return { close }
     }
 
     port.onMessage.addListener((message) => {
@@ -129,21 +183,39 @@ export const backendClient = {
       if (isClosed) return
       isClosed = true
       if (chrome.runtime?.lastError) {
-        onError?.(buildRuntimeError('后台流式服务已断开'))
+        const runtimeError = buildRuntimeError('后台流式服务已断开')
+        onError?.(
+          isMissingReceiverError(runtimeError)
+            ? buildBackgroundUnavailableError(runtimeError.message)
+            : runtimeError
+        )
       }
     })
 
-    port.postMessage({
-      type: FASTFLOW_STREAM_OPEN,
-      payload: {
-        service,
-        path,
-        method,
-        headers,
-        body: serializeBody(body, headers),
-        timeoutMs
+    try {
+      port.postMessage({
+        type: FASTFLOW_STREAM_OPEN,
+        payload: {
+          service,
+          path,
+          method,
+          headers,
+          body: serializeBody(body, headers),
+          timeoutMs
+        }
+      })
+    } catch (error) {
+      if (!isClosed) {
+        isClosed = true
+        onError?.(
+          isMissingReceiverError(error)
+            ? buildBackgroundUnavailableError(error.message)
+            : error instanceof Error
+              ? error
+              : new Error('扩展后台服务不可用')
+        )
       }
-    })
+    }
 
     return { close }
   }

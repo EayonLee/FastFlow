@@ -35,6 +35,7 @@ const panelMode = ref(DEFAULT_PROTOCOL_MODE)
 const panelQuery = ref('')
 const panelRange = ref(null)
 const activeIndex = ref(-1)
+const panelRef = ref(null)
 const panelHintVisible = ref(false)
 const panelHintText = ref('')
 let panelHintTimer = null
@@ -125,6 +126,34 @@ function getNextSelectableIndex(step) {
     }
   }
   return -1
+}
+
+async function ensureActiveOptionVisible() {
+  if (!panelVisible.value || activeIndex.value < 0) return
+
+  await nextTick()
+
+  const panelElement = panelRef.value
+  if (!(panelElement instanceof HTMLElement)) return
+
+  const optionElement = panelElement.querySelector(`[data-protocol-option-index="${activeIndex.value}"]`)
+  if (!(optionElement instanceof HTMLElement)) return
+
+  const panelRect = panelElement.getBoundingClientRect()
+  const optionRect = optionElement.getBoundingClientRect()
+  const optionTop = optionRect.top - panelRect.top + panelElement.scrollTop
+  const optionBottom = optionTop + optionRect.height
+  const viewTop = panelElement.scrollTop
+  const viewBottom = viewTop + panelElement.clientHeight
+  const scrollPadding = 8
+
+  if (optionTop - scrollPadding < viewTop) {
+    panelElement.scrollTop = Math.max(0, optionTop - scrollPadding)
+    return
+  }
+  if (optionBottom + scrollPadding > viewBottom) {
+    panelElement.scrollTop = optionBottom - panelElement.clientHeight + scrollPadding
+  }
 }
 
 const editor = useEditor({
@@ -223,6 +252,10 @@ watch(
 watch([visibleOptions, panelVisible, panelMode], () => {
   if (!panelVisible.value) return
   normalizeActiveIndex()
+})
+
+watch(activeIndex, () => {
+  void ensureActiveOptionVisible()
 })
 
 async function ensureProtocolCatalogLoaded(protocol, options = {}) {
@@ -545,6 +578,7 @@ onBeforeUnmount(() => {
 
     <div
       v-if="panelVisible"
+      ref="panelRef"
       class="protocol-panel skill-slash-panel"
       :class="[`protocol-panel--${activeProtocol.mode}`, activeProtocol.panel.sectionClass]"
     >
@@ -573,6 +607,7 @@ onBeforeUnmount(() => {
           :key="option.key"
           type="button"
           class="protocol-item skill-slash-item"
+          :data-protocol-option-index="index"
           :class="{ active: index === activeIndex, 'is-disabled': !isOptionSelectable(option) }"
           :disabled="!isOptionSelectable(option)"
           @mousedown.prevent="onOptionClick(option)"

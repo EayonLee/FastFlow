@@ -28,7 +28,7 @@
 - 调用模型并执行工具链
 - 输出标准化 SSE 事件
 - 提供 Slash 面板目录
-- 维护短期会话历史、工具循环保护与回答复核策略
+- 维护短期会话历史与工具循环保护
 
 默认端口：`9090`
 
@@ -103,7 +103,6 @@ source .venv/bin/activate
 | `SESSION_HISTORY_MAX_MESSAGES` | 单个 session 的消息保留上限 |
 | `SESSION_HISTORY_EXPIRE_SECONDS` | 会话过期时间 |
 | `TOOL_MAX_CALLS_PER_QUESTION` | 单个问题允许的工具调用上限 |
-| `CHAT_ANSWER_SUFFICIENCY_MAX_REVIEW_ROUNDS` | 回答复核最大回环次数 |
 
 说明：
 
@@ -197,7 +196,7 @@ nexus/
 ```text
 Chrome Extension
   -> POST /fastflow/nexus/v1/agent/chat/completions
-  -> ChatAgent / tools / review loop
+  -> ChatAgent / tools
   -> SSE events
   -> [DONE]
 ```

@@ -1,6 +1,7 @@
 import { createParser } from 'eventsource-parser'
 
-import { runtimeConfig } from '@/extension/config/runtime'
+import { readRuntimeChannelOverrides, resolveRuntimeMode } from '@/extension/config/env'
+import { resolveChannelConfig, resolveReleaseChannel } from '@/extension/config/channels'
 import {
   FASTFLOW_HTTP_REQUEST,
   FASTFLOW_HTTP_RESPONSE,
@@ -20,11 +21,24 @@ import {
  * - 固定后端地址来自共享配置，不允许根据页面地址动态推导。
  */
 const DEFAULT_HTTP_TIMEOUT_MS = 30 * 1000
-const SERVICE_BASE_URL = {
-  api: runtimeConfig.apiBaseUrl,
-  nexus: runtimeConfig.nexusBaseUrl
-}
 let backgroundInitialized = false
+let cachedServiceBaseUrl = null
+
+function getServiceBaseUrlMap() {
+  if (cachedServiceBaseUrl) return cachedServiceBaseUrl
+
+  const releaseChannel = resolveReleaseChannel(resolveRuntimeMode())
+  const config = resolveChannelConfig(
+    releaseChannel,
+    readRuntimeChannelOverrides(releaseChannel)
+  )
+
+  cachedServiceBaseUrl = {
+    api: config.apiBaseUrl,
+    nexus: config.nexusBaseUrl
+  }
+  return cachedServiceBaseUrl
+}
 
 /**
  * 将 service + path 组装成最终请求 URL。
@@ -32,7 +46,7 @@ let backgroundInitialized = false
  * 这里强制要求 path 以 `/` 开头，避免后台层出现隐式拼接错误。
  */
 function buildServiceUrl(service, path) {
-  const baseUrl = SERVICE_BASE_URL[service]
+  const baseUrl = getServiceBaseUrlMap()[service]
   if (!baseUrl) {
     throw new Error(`不支持的服务类型: ${service}`)
   }
@@ -235,45 +249,52 @@ async function handleStream(port, payload, controller) {
   }
 }
 
-export function initializeBackground() {
-  if (backgroundInitialized) return
-  backgroundInitialized = true
+function handleRuntimeMessage(message, _sender, sendResponse) {
+  if (!message) return false
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (!message || message.type !== FASTFLOW_HTTP_REQUEST) return false
+  if (message.type !== FASTFLOW_HTTP_REQUEST) return false
 
-    handleHttpRequest(message.payload)
-      .then(sendResponse)
-      .catch((error) => {
-        sendResponse({
-          type: FASTFLOW_HTTP_RESPONSE,
-          payload: {
-            ok: false,
-            status: 0,
-            statusText: '',
-            data: null,
-            error: error instanceof Error ? error.message : '后台请求失败'
-          }
-        })
+  handleHttpRequest(message.payload)
+    .then(sendResponse)
+    .catch((error) => {
+      sendResponse({
+        type: FASTFLOW_HTTP_RESPONSE,
+        payload: {
+          ok: false,
+          status: 0,
+          statusText: '',
+          data: null,
+          error: error instanceof Error ? error.message : '后台请求失败'
+        }
       })
+    })
 
-    return true
+  return true
+}
+
+function handleRuntimeConnect(port) {
+  if (port.name !== FASTFLOW_STREAM_PORT) return
+
+  let closed = false
+  let controller = null
+  port.onDisconnect.addListener(() => {
+    closed = true
+    controller?.abort()
   })
 
-  chrome.runtime.onConnect.addListener((port) => {
-    if (port.name !== FASTFLOW_STREAM_PORT) return
-
-    let closed = false
-    let controller = null
-    port.onDisconnect.addListener(() => {
-      closed = true
-      controller?.abort()
-    })
-
-    port.onMessage.addListener((message) => {
-      if (closed || !message || message.type !== FASTFLOW_STREAM_OPEN) return
-      controller = new AbortController()
-      handleStream(port, message.payload, controller)
-    })
+  port.onMessage.addListener((message) => {
+    if (closed || !message || message.type !== FASTFLOW_STREAM_OPEN) return
+    controller = new AbortController()
+    handleStream(port, message.payload, controller)
   })
 }
+
+function registerBackgroundListeners() {
+  if (backgroundInitialized) return
+  backgroundInitialized = true
+  chrome.runtime.onMessage.addListener(handleRuntimeMessage)
+  chrome.runtime.onConnect.addListener(handleRuntimeConnect)
+}
+
+// MV3 service worker 监听器必须在脚本初始求值阶段同步注册。
+registerBackgroundListeners()

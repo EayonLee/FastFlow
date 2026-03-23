@@ -79,13 +79,6 @@ function normalizeEvent(event, index) {
     return buildNormalizedEvent(event, index, '工具执行', detailFromMessage || `工具执行失败：${toolName}`)
   }
 
-  if (eventType === 'review.started') {
-    return buildNormalizedEvent(event, index, '模型回答效果审查', detailFromMessage || '正在审查模型回答是否满足用户问题')
-  }
-  if (eventType === 'answer.reset') {
-    return buildNormalizedEvent(event, index, '模型回答效果审查', detailFromMessage || '候选回答未通过审查，继续补充信息')
-  }
-
   return buildNormalizedEvent(event, index, '执行事件', detailFromMessage || eventType || '处理中')
 }
 
@@ -99,7 +92,6 @@ function buildPhaseEvent(event, index, phase, completed, detailFromMessage) {
 function getPhaseTitle(phase) {
   if (phase === 'analyze_question') return '问题理解'
   if (phase === 'execute_tools') return '工具执行'
-  if (phase === 'review_answer') return '模型回答效果审查'
   if (phase === 'generate_final_answer') return '回答生成'
   return '执行阶段'
 }
@@ -107,7 +99,6 @@ function getPhaseTitle(phase) {
 function getPhaseDetail(phase, completed) {
   if (phase === 'analyze_question') return completed ? '完成理解用户问题' : '开始理解用户问题'
   if (phase === 'execute_tools') return completed ? '完成工具执行流程' : '开始执行工具调用'
-  if (phase === 'review_answer') return completed ? '完成模型回答充足性审查' : '开始审查模型回答充足性'
   if (phase === 'generate_final_answer') return completed ? '完成最终回答生成' : '开始生成最终回答'
   return completed ? '阶段已完成' : '阶段开始'
 }
@@ -132,7 +123,7 @@ function buildNormalizedEvent(event, index, title, detail) {
 function getToneClass(type) {
   if (type === 'tool.failed') return 'is-danger'
   if (type === 'tool.completed' || type === 'phase.completed' || type === 'run.completed') return 'is-success'
-  if (type === 'tool.started' || type === 'phase.started' || type === 'review.started') return 'is-running'
+  if (type === 'tool.started' || type === 'phase.started') return 'is-running'
   return 'is-neutral'
 }
 

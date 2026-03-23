@@ -5,7 +5,6 @@ from __future__ import annotations
 
 该模块负责处理多模型“思考内容载体差异”，并输出统一结果：
 1) 面向用户回答：提取 answer_text + reasoning_text
-2) 面向结构化控制面：去除思考包裹后提取 JSON
 
 兼容重点（当前模型池）：
 - MiniMax M2.5：`<think>...</think>` / `reasoning_details`
@@ -14,10 +13,7 @@ from __future__ import annotations
 - GLM-5：`reasoning_content`
 """
 
-import json
 import re
-from dataclasses import dataclass
-from json import JSONDecodeError
 from typing import Any, Iterable, Mapping, Tuple
 
 THINK_TAG_NAMES = ("think", "thinking", "reasoning", "analysis")
@@ -25,18 +21,6 @@ THINK_BLOCK_PATTERNS = tuple(
     re.compile(rf"<{tag}>([\s\S]*?)</{tag}>", flags=re.IGNORECASE) for tag in THINK_TAG_NAMES
 )
 THINK_SINGLE_TAG_PATTERN = re.compile(r"</?(?:" + "|".join(THINK_TAG_NAMES) + r")>", flags=re.IGNORECASE)
-JSON_CODE_BLOCK_PATTERN = re.compile(r"```(?:json)?\s*([\s\S]*?)```", flags=re.IGNORECASE)
-
-
-@dataclass(frozen=True)
-class StructuredJsonNormalizationResult:
-    """
-    结构化输出标准化结果。
-    """
-
-    payload: dict[str, Any]
-    had_reasoning: bool
-    source: str
 
 
 def _normalize_text(value: Any) -> str:
@@ -196,64 +180,3 @@ def normalize_answer_and_reasoning(
     merged_reasoning_parts.extend(kwargs_reasoning)
     merged_reasoning = "\n".join([part for part in merged_reasoning_parts if part]).strip()
     return answer_text, merged_reasoning
-
-
-def _parse_json_from_text(text: str) -> tuple[dict[str, Any], str]:
-    stripped = _normalize_text(text)
-    if not stripped:
-        raise ValueError("empty structured output")
-
-    try:
-        parsed = json.loads(stripped)
-        if isinstance(parsed, dict):
-            return parsed, "full_text"
-    except JSONDecodeError:
-        pass
-
-    for match in JSON_CODE_BLOCK_PATTERN.finditer(stripped):
-        candidate = _normalize_text(match.group(1))
-        if not candidate:
-            continue
-        try:
-            parsed = json.loads(candidate)
-            if isinstance(parsed, dict):
-                return parsed, "json_code_block"
-        except JSONDecodeError:
-            continue
-
-    decoder = json.JSONDecoder()
-    for index, char in enumerate(stripped):
-        if char != "{":
-            continue
-        try:
-            parsed, _ = decoder.raw_decode(stripped[index:])
-            if isinstance(parsed, dict):
-                return parsed, "json_fragment"
-        except JSONDecodeError:
-            continue
-
-    raise ValueError("structured output does not contain a valid json object")
-
-
-def normalize_structured_json(
-    content: Any,
-    additional_kwargs: Mapping[str, Any] | None = None,
-    *,
-    model_id: str = "",
-) -> StructuredJsonNormalizationResult:
-    """
-    标准化结构化输出：
-    1) 去除思考内容（标签/kwargs）
-    2) 提取首个合法 JSON 对象
-    """
-    answer_text, reasoning_text = normalize_answer_and_reasoning(
-        content,
-        additional_kwargs,
-        model_id=model_id,
-    )
-    payload, source = _parse_json_from_text(answer_text if answer_text else _content_to_text(content))
-    return StructuredJsonNormalizationResult(
-        payload=payload,
-        had_reasoning=bool(_normalize_text(reasoning_text)),
-        source=source,
-    )
