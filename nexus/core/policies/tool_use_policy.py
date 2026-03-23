@@ -453,7 +453,7 @@ def select_tool_candidates(
     对工具做相关性排序，并过滤已执行过的同名工具。
 
     focus_text:
-    - 额外关注文本，例如 review 节点产出的 missing_info
+    - 额外关注文本，用于补充当前问题的检索上下文
     """
 
     if not tools:

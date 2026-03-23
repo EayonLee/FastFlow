@@ -766,6 +766,20 @@ async function handleGenerate() {
   )
   scrollToBottom()
 
+  let chatRequestFinalized = false
+  const finalizeChatRequest = () => {
+    if (!isChatAgent || chatRequestFinalized) return
+    chatRequestFinalized = true
+    streamTypewriter.drain(loadingMsgId).then(() => {
+      updateMessage(loadingMsgId, (target) => {
+        if (target.isLoading) target.isLoading = false
+      })
+      markRuntimeCompleted(loadingMsgId)
+      renderMermaidOnceAfterReply()
+      isLoading.value = false
+    })
+  }
+
   // 5) 仅 Chat 模式需要导出当前工作流配置与元信息。
   let workflowGraph = null
   let workflowMeta = null
@@ -804,7 +818,7 @@ async function handleGenerate() {
         return
       }
       if (event.type === 'answer.done') {
-        markRuntimeCompleted(loadingMsgId)
+        finalizeChatRequest()
         return
       }
       if (event.type === 'answer.reset') {
@@ -825,21 +839,13 @@ async function handleGenerate() {
       }
       appendExecutionEvent(loadingMsgId, event)
       if (event.type === 'run.completed') {
-        markRuntimeCompleted(loadingMsgId)
+        finalizeChatRequest()
       }
     },
     (graphData) => {
       // Chat 智能体不返回图，直接结束
       if (isChatAgent) {
-        // 等待所有 chunk 渲染完成后再结束 loading
-        streamTypewriter.drain(loadingMsgId).then(() => {
-          updateMessage(loadingMsgId, (target) => {
-            if (target.isLoading) target.isLoading = false
-          })
-          markRuntimeCompleted(loadingMsgId)
-          renderMermaidOnceAfterReply()
-          isLoading.value = false
-        })
+        finalizeChatRequest()
         return
       }
 

@@ -8,7 +8,6 @@ from langchain_core.messages import ToolMessage
 
 PHASE_ANALYZE_QUESTION = "analyze_question"
 PHASE_EXECUTE_TOOLS = "execute_tools"
-PHASE_REVIEW_ANSWER = "review_answer"
 PHASE_GENERATE_FINAL_ANSWER = "generate_final_answer"
 
 

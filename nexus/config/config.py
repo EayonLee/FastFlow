@@ -41,10 +41,6 @@ class Settings(BaseSettings):
     # 工具循环检测窗口：仅观察最近 N 次工具执行历史
     TOOL_LOOP_HISTORY_SIZE: int = 30
 
-    # 对话回答充足性复核配置
-    # 单个用户问题最多允许复核回环次数（防止 review 死循环）
-    CHAT_ANSWER_SUFFICIENCY_MAX_REVIEW_ROUNDS: int = 3
-    
     # 日志配置
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "text"
