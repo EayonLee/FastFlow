@@ -4,6 +4,7 @@
 该模块只提供与节点类型无关的通用能力：
 - 获取完整工作流图（展示用裁剪版本）
 - 获取工作流元信息（workflow_name / workflow_description）
+- 按 nodeId 获取轻量节点摘要
 - 按 nodeId 获取单个节点信息
 - 按关键词检索节点（name/type/intro/nodeId）
 
@@ -15,16 +16,83 @@
 from __future__ import annotations
 
 import json
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from langchain_core.tools import tool
 
 from nexus.config.logger import get_logger, log_tool_failure, log_tool_success
 from nexus.core.schemas import ChatRequestContext
-
 from .context import WorkflowGraphContext
 
 logger = get_logger(__name__)
+
+_SUMMARY_CONFIG_KEYS = {"model", "temperature", "maxToken"}
+
+
+def _has_configured_value(value) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, dict, tuple, set)):
+        return len(value) > 0
+    return True
+
+
+def _build_input_field_summary(item: dict) -> dict:
+    return {
+        "key": item.get("key"),
+        "label": item.get("label"),
+        "valueType": item.get("valueType"),
+        "required": bool(item.get("required", False)),
+        "has_value": _has_configured_value(item.get("value")),
+    }
+
+
+def _build_output_field_summary(item: dict) -> dict:
+    return {
+        "key": item.get("key"),
+        "label": item.get("label"),
+        "valueType": item.get("valueType"),
+    }
+
+
+def _build_node_config_summary(inputs: list[dict], outputs: list[dict]) -> dict:
+    summary = {
+        "input_count": len(inputs),
+        "output_count": len(outputs),
+    }
+
+    for item in inputs:
+        key = str(item.get("key") or "").strip()
+        if not key:
+            continue
+        value = item.get("value")
+
+        if key in _SUMMARY_CONFIG_KEYS and isinstance(value, (str, int, float, bool)):
+            summary[key] = value
+            continue
+        if key == "history":
+            summary["history_enabled"] = _has_configured_value(value)
+            if isinstance(value, int):
+                summary["history_rounds"] = value
+            continue
+        if key == "systemPrompt":
+            summary["has_system_prompt"] = _has_configured_value(value)
+            continue
+        if key == "fileUrlList":
+            summary["has_files"] = _has_configured_value(value)
+            continue
+        if key == "userChatInput":
+            summary["reads_user_input"] = _has_configured_value(value)
+            continue
+        if key == "isResponseAnswerText" and isinstance(value, bool):
+            summary["returns_answer_text"] = value
+            continue
+        if key == "aiChatVision" and isinstance(value, bool):
+            summary["vision_enabled"] = value
+
+    return summary
 
 
 class WorkflowGraphTools:
@@ -32,8 +100,9 @@ class WorkflowGraphTools:
     工作流图工具：
     1) 查询完整工作流图
     2) 查询工作流元信息
-    3) 查询单个节点详情
-    4) 按关键词检索节点
+    3) 查询节点轻量摘要
+    4) 查询单个节点详情
+    5) 按关键词检索节点
 
     调用链路：
     - 外层通过 build_workflow_base_tools 注册 LangChain tool
@@ -109,6 +178,49 @@ class WorkflowGraphTools:
         error_result = {"error": f"node not found: {node_id}"}
         error_result_json = json.dumps(error_result, ensure_ascii=False)
         log_tool_failure(logger, "get_workflow_node_info", error=str(error_result.get("error") or ""), node_id=node_id)
+        return error_result_json
+
+    def get_workflow_node_summary(self, node_id: str) -> str:
+        """
+        工作流图工具：按节点 ID 返回轻量节点摘要。
+
+        该摘要仅保留模型总结所需的结构化信息，不返回超长配置原文。
+        """
+        full_workflow_graph = self._context_reader.get_full_show_workflow_graph_dict()
+        for node in full_workflow_graph.get("nodes", []):
+            if not isinstance(node, dict):
+                continue
+            if str(node.get("nodeId") or "") != node_id:
+                continue
+
+            raw_inputs = node.get("inputs")
+            raw_outputs = node.get("outputs")
+            inputs = [item for item in raw_inputs if isinstance(item, dict)] if isinstance(raw_inputs, list) else []
+            outputs = [item for item in raw_outputs if isinstance(item, dict)] if isinstance(raw_outputs, list) else []
+            workflow_graph_node_summary = {
+                "id": node.get("nodeId"),
+                "type": node.get("flowNodeType"),
+                "name": node.get("name"),
+                "intro": node.get("intro"),
+                "input_fields": [_build_input_field_summary(item) for item in inputs],
+                "output_fields": [_build_output_field_summary(item) for item in outputs],
+                "config_summary": _build_node_config_summary(inputs, outputs),
+            }
+            result_json = json.dumps(workflow_graph_node_summary, ensure_ascii=False)
+            log_tool_success(
+                logger,
+                "get_workflow_node_summary",
+                node_id=str(workflow_graph_node_summary.get("id") or ""),
+                node_type=str(workflow_graph_node_summary.get("type") or ""),
+                name=str(workflow_graph_node_summary.get("name") or ""),
+                input_count=len(workflow_graph_node_summary.get("input_fields", [])),
+                output_count=len(workflow_graph_node_summary.get("output_fields", [])),
+            )
+            return result_json
+
+        error_result = {"error": f"node not found: {node_id}"}
+        error_result_json = json.dumps(error_result, ensure_ascii=False)
+        log_tool_failure(logger, "get_workflow_node_summary", error=str(error_result.get("error") or ""), node_id=node_id)
         return error_result_json
 
     def find_workflow_graph_nodes(self, query: str) -> str:
@@ -193,11 +305,20 @@ def build_workflow_base_tools(context: ChatRequestContext) -> Tuple[List, Workfl
     @tool
     def get_workflow_node_info(node_id: str):
         """
-        在已知 `node_id` 且需要单节点详情时调用。
+        在已知 `node_id` 且需要完整节点配置时调用。
         输入必须是节点 ID；返回 `id/type/name/intro/inputs/outputs`。
         若节点不存在，返回 `{"error": "..."}"`。
         """
         return tool_impl.get_workflow_node_info(node_id)
+
+    @tool
+    def get_workflow_node_summary(node_id: str):
+        """
+        在已知 `node_id` 且只需要节点摘要时调用。
+        返回轻量结构：`id/type/name/intro/input_fields/output_fields/config_summary`。
+        不返回完整 `systemPrompt`、文件列表或其他超长配置原文。
+        """
+        return tool_impl.get_workflow_node_summary(node_id)
 
     @tool
     def find_workflow_graph_nodes(query: str):
@@ -208,10 +329,12 @@ def build_workflow_base_tools(context: ChatRequestContext) -> Tuple[List, Workfl
         """
         return tool_impl.find_workflow_graph_nodes(query)
 
-    # 返回固定顺序，便于调试与观测。
-    return [
+    tools = [
         get_full_workflow_graph,
         get_workflow_meta,
+        get_workflow_node_summary,
         get_workflow_node_info,
         find_workflow_graph_nodes,
-    ], tool_impl
+    ]
+    # 返回固定顺序，便于调试与观测。
+    return tools, tool_impl

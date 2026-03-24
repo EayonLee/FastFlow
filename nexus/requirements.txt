@@ -1,8 +1,6 @@
 # langchain 核心库
 langchain==1.0.1
 langchain-community
-# 工具执行链路依赖 LangGraph runtime 注入行为，锁版本避免上游变更引入不兼容。
-langgraph==1.0.5
 
 # 服务端框架
 fastapi

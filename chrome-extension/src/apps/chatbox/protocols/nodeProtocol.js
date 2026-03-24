@@ -4,7 +4,7 @@ import { createProtocolTokenNode, createTriggerRegex, normalizeString } from './
 /**
  * Node 协议定义：
  * - trigger: #
- * - token: selected_node(<node_id>)
+ * - token: 节点引用标签
  * - 数据源: 当前画布导出的 workflow_graph
  */
 const MODE = 'node'
@@ -23,7 +23,7 @@ const tokenNode = createProtocolTokenNode({
     },
   },
   getLabel: (attrs) => String(attrs.label || attrs.nodeId || ''),
-  serializeText: (attrs) => `selected_node(${String(attrs.nodeId || '')})`,
+  serializeText: (attrs) => `#${String(attrs.label || attrs.nodeId || '')}`,
 })
 
 function parseWorkflowGraphPayload(rawGraph) {
@@ -109,7 +109,6 @@ export const nodeProtocol = {
     hintText: '可直接在输入框输入 # 快速唤起',
     sectionClass: 'nodes-section',
   },
-  secondarySection: null,
   async loadItems() {
     return await loadNodeItems()
   },

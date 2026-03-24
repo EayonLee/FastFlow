@@ -34,9 +34,16 @@ const normalizedEvents = computed(() => {
   return props.events.map((event, index) => normalizeEvent(event, index))
 })
 
+const emptyStateText = computed(() => {
+  if (props.runtimeStatus === 'cancelled') return '执行已停止：本轮生成已手动停止'
+  if (props.runtimeStatus === 'failed') return '执行中断：本次请求失败'
+  return 'Deep Thinking ...'
+})
+
 const liveLine = computed(() => {
   const last = normalizedEvents.value.length ? normalizedEvents.value[normalizedEvents.value.length - 1] : null
   if (!last) {
+    if (props.runtimeStatus === 'cancelled') return '执行已停止：本轮生成已手动停止'
     if (props.runtimeStatus === 'failed') return '执行中断：请求失败'
     return props.completed ? '执行完成' : 'Deep Thinking ...'
   }
@@ -53,13 +60,28 @@ function normalizeEvent(event, index) {
   const eventType = String(event?.type || '').trim()
   const phase = String(event?.phase || '').trim()
   const detailFromMessage = String(event?.message || '').trim()
-  const toolName = String(event?.toolName || '').trim()
+  const toolName = String(event?.toolName || event?.tool_name || '').trim()
 
   if (eventType === 'run.started') {
     return buildNormalizedEvent(event, index, '会话状态', detailFromMessage || '开始处理用户问题')
   }
   if (eventType === 'run.completed') {
     return buildNormalizedEvent(event, index, '会话状态', detailFromMessage || '本轮处理完成')
+  }
+  if (eventType === 'run.cancelled') {
+    return buildNormalizedEvent(event, index, '会话状态', detailFromMessage || '已停止生成')
+  }
+  if (eventType === 'answer.done') {
+    return buildNormalizedEvent(event, index, '回答生成', detailFromMessage || '最终回答已生成')
+  }
+  if (eventType === 'answer.reset') {
+    return buildNormalizedEvent(event, index, '回答生成', detailFromMessage || '已重置临时回答，准备继续执行后续步骤')
+  }
+  if (eventType === 'thinking.summary') {
+    return buildNormalizedEvent(event, index, '思考过程', detailFromMessage || '已整理当前思考内容')
+  }
+  if (eventType === 'error') {
+    return buildNormalizedEvent(event, index, '会话状态', detailFromMessage || '本次请求失败')
   }
 
   if (eventType === 'phase.started' || eventType === 'phase.completed') {
@@ -115,20 +137,16 @@ function buildNormalizedEvent(event, index, title, detail) {
     type: String(event?.type || ''),
     title: String(title || '').trim(),
     detail: String(detail || '').trim(),
-    elapsedMs: Number.isFinite(event?.elapsedMs) ? event.elapsedMs : null,
-    result: String(event?.result || '')
+    elapsedMs: Number.isFinite(event?.elapsedMs) ? event.elapsedMs : null
   }
 }
 
 function getToneClass(type) {
   if (type === 'tool.failed') return 'is-danger'
+  if (type === 'run.cancelled') return 'is-warning'
   if (type === 'tool.completed' || type === 'phase.completed' || type === 'run.completed') return 'is-success'
   if (type === 'tool.started' || type === 'phase.started') return 'is-running'
   return 'is-neutral'
-}
-
-function canExpandResult(event) {
-  return !!String(event?.result || '').trim()
 }
 
 function handleToggle(event) {
@@ -156,7 +174,7 @@ function handleToggle(event) {
 
     <ol class="runtime-list">
       <li v-if="!normalizedEvents.length" class="runtime-empty">
-        {{ props.runtimeStatus === 'failed' ? '执行中断：本次请求失败' : 'Deep Thinking ...' }}
+        {{ emptyStateText }}
       </li>
       <li v-for="event in normalizedEvents" :key="event.id" class="runtime-item">
         <span class="runtime-dot" :class="getToneClass(event.type)"></span>
@@ -168,11 +186,6 @@ function handleToggle(event) {
             </span>
           </div>
           <p class="runtime-text">{{ event.detail || '处理中' }}</p>
-
-          <details v-if="canExpandResult(event)" class="runtime-result">
-            <summary>查看工具结果</summary>
-            <pre>{{ event.result }}</pre>
-          </details>
         </div>
       </li>
     </ol>

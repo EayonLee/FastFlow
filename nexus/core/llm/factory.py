@@ -81,7 +81,7 @@ def _get_runtime(model_config_id: int, auth_token: Optional[str]) -> LLMRuntime:
     cache_key = _build_cache_key(model_config_id)
     cached_runtime = CacheManager.get_llm_runtime(cache_key)
     if cached_runtime is not None:
-        logger.info(
+        logger.debug(
             "[模型实例获取] 命中缓存 adapter=%s model_id=%s effective_model_params=%s model_config_id=%s",
             cached_runtime.adapter.provider_id,
             cached_runtime.model_id or "unknown",
@@ -112,11 +112,10 @@ def _get_runtime(model_config_id: int, auth_token: Optional[str]) -> LLMRuntime:
     )
     CacheManager.set_llm_runtime(cache_key, runtime)
     logger.info(
-        "[模型实例获取] 创建成功并写入缓存 adapter=%s model_id=%s effective_model_params=%s thinking_enabled=%s model_config_id=%s",
+        "[模型实例获取] 创建成功并写入缓存 adapter=%s model_id=%s effective_model_params=%s model_config_id=%s",
         runtime.adapter.provider_id,
         runtime.model_id or "unknown",
         _serialize_model_params(runtime.effective_model_params),
-        str(runtime.adapter.is_thinking_enabled(runtime.model_config)).lower(),
         model_config_id,
     )
     return runtime

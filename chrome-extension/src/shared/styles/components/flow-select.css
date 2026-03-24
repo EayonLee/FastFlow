@@ -105,6 +105,11 @@
   transition: background-color 0.3s, border-color 0.3s;
 }
 
+.select-dropdown.align-end {
+  left: auto;
+  right: 0;
+}
+
 /* Position variants */
 .select-dropdown.top {
   bottom: 100%;

@@ -21,6 +21,9 @@ THINK_BLOCK_PATTERNS = tuple(
     re.compile(rf"<{tag}>([\s\S]*?)</{tag}>", flags=re.IGNORECASE) for tag in THINK_TAG_NAMES
 )
 THINK_SINGLE_TAG_PATTERN = re.compile(r"</?(?:" + "|".join(THINK_TAG_NAMES) + r")>", flags=re.IGNORECASE)
+THINK_OPEN_TAGS = tuple(f"<{tag}>".lower() for tag in THINK_TAG_NAMES)
+THINK_CLOSE_TAGS = tuple(f"</{tag}>".lower() for tag in THINK_TAG_NAMES)
+THINK_STREAM_TAGS = THINK_OPEN_TAGS + THINK_CLOSE_TAGS
 
 
 def _normalize_text(value: Any) -> str:
@@ -111,6 +114,153 @@ def _collect_reasoning_from_additional_kwargs(
         seen.add(item)
         deduplicated.append(item)
     return deduplicated
+
+
+def _find_first_tag(text: str, tags: tuple[str, ...]) -> tuple[int, str]:
+    lowered = text.lower()
+    matched_index = -1
+    matched_tag = ""
+
+    for tag in tags:
+        index = lowered.find(tag)
+        if index < 0:
+            continue
+        if matched_index < 0 or index < matched_index or (index == matched_index and len(tag) > len(matched_tag)):
+            matched_index = index
+            matched_tag = tag
+
+    return matched_index, matched_tag
+
+
+def _resolve_partial_tag_prefix_length(text: str) -> int:
+    lowered = text.lower()
+    longest_prefix = 0
+
+    for tag in THINK_STREAM_TAGS:
+        max_prefix_length = min(len(lowered), len(tag) - 1)
+        for prefix_length in range(max_prefix_length, 0, -1):
+            if lowered.endswith(tag[:prefix_length]):
+                longest_prefix = max(longest_prefix, prefix_length)
+                break
+
+    return longest_prefix
+
+
+class InlineThinkingStreamParser:
+    """
+    解析流式正文中的 `<think>...</think>` 片段。
+
+    部分 provider 会把思考内容直接混在 content 流里返回。
+    这里在增量阶段就把“思考”和“最终回答”拆开，避免先把 `<think>` 内容流到聊天气泡，
+    之后再通过 `answer.reset` 回滚。
+    """
+
+    def __init__(self) -> None:
+        self._buffer = ""
+        self._inside_thinking = False
+        self._answer_started = False
+        self._reasoning_started = False
+
+    def feed(self, text: str) -> tuple[str, str]:
+        if text:
+            self._buffer = f"{self._buffer}{text}"
+        return self._drain(final=False)
+
+    def flush(self) -> tuple[str, str]:
+        return self._drain(final=True)
+
+    def _drain(self, *, final: bool) -> tuple[str, str]:
+        answer_parts: list[str] = []
+        reasoning_parts: list[str] = []
+
+        while self._buffer:
+            if self._inside_thinking:
+                close_index, close_tag = _find_first_tag(self._buffer, THINK_CLOSE_TAGS)
+                if close_index >= 0:
+                    if close_index > 0:
+                        self._append_reasoning_chunk(
+                            reasoning_parts,
+                            self._buffer[:close_index],
+                            final_chunk=True,
+                        )
+                    self._buffer = self._buffer[close_index + len(close_tag) :]
+                    self._inside_thinking = False
+                    continue
+
+                safe_text = self._consume_safe_text(final=final)
+                if safe_text:
+                    self._append_reasoning_chunk(reasoning_parts, safe_text, final_chunk=final)
+                break
+
+            open_index, open_tag = _find_first_tag(self._buffer, THINK_OPEN_TAGS)
+            if open_index >= 0:
+                if open_index > 0:
+                    self._append_answer_chunk(
+                        answer_parts,
+                        self._buffer[:open_index],
+                        final_chunk=True,
+                    )
+                self._buffer = self._buffer[open_index + len(open_tag) :]
+                self._inside_thinking = True
+                continue
+
+            safe_text = self._consume_safe_text(final=final)
+            if safe_text:
+                self._append_answer_chunk(answer_parts, safe_text, final_chunk=final)
+            break
+
+        return "".join(answer_parts), "".join(reasoning_parts)
+
+    def _consume_safe_text(self, *, final: bool) -> str:
+        if not self._buffer:
+            return ""
+        if final:
+            safe_text = self._buffer
+            self._buffer = ""
+            return safe_text
+
+        holdback_length = _resolve_partial_tag_prefix_length(self._buffer)
+        if holdback_length <= 0:
+            safe_text = self._buffer
+            self._buffer = ""
+            return safe_text
+        if holdback_length >= len(self._buffer):
+            return ""
+
+        safe_text = self._buffer[:-holdback_length]
+        self._buffer = self._buffer[-holdback_length:]
+        return safe_text
+
+    def _append_answer_chunk(self, parts: list[str], text: str, *, final_chunk: bool) -> None:
+        normalized = self._normalize_visible_chunk(
+            text,
+            started=self._answer_started,
+            final_chunk=final_chunk,
+        )
+        if not normalized:
+            return
+        self._answer_started = True
+        parts.append(normalized)
+
+    def _append_reasoning_chunk(self, parts: list[str], text: str, *, final_chunk: bool) -> None:
+        normalized = self._normalize_visible_chunk(
+            text,
+            started=self._reasoning_started,
+            final_chunk=final_chunk,
+        )
+        if not normalized:
+            return
+        self._reasoning_started = True
+        parts.append(normalized)
+
+    @staticmethod
+    def _normalize_visible_chunk(text: str, *, started: bool, final_chunk: bool) -> str:
+        normalized = text
+        if not started:
+            normalized = normalized.lstrip()
+        if final_chunk:
+            normalized = normalized.rstrip()
+        return normalized
 
 
 def _split_think_wrapped_content(content: Any) -> Tuple[str, str, bool]:

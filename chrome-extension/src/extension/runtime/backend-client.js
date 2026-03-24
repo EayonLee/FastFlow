@@ -1,6 +1,8 @@
 import {
   FASTFLOW_HTTP_REQUEST,
   FASTFLOW_HTTP_RESPONSE,
+  FASTFLOW_STREAM_CANCEL,
+  FASTFLOW_STREAM_CANCELLED,
   FASTFLOW_STREAM_CLOSE,
   FASTFLOW_STREAM_ERROR,
   FASTFLOW_STREAM_EVENT,
@@ -136,11 +138,24 @@ export const backendClient = {
     // 流式请求需要长期保持通道，因此改用 Port，而不是一次性 sendMessage。
     let port = null
     let isClosed = false
+    let isCancelling = false
 
     const close = () => {
       if (isClosed) return
       isClosed = true
       port?.disconnect()
+    }
+
+    const cancel = () => {
+      if (isClosed || isCancelling) return
+      isCancelling = true
+      try {
+        port?.postMessage({ type: FASTFLOW_STREAM_CANCEL })
+      } catch {
+        isClosed = true
+        onComplete?.({ cancelled: true })
+        port?.disconnect()
+      }
     }
 
     try {
@@ -154,7 +169,7 @@ export const backendClient = {
             ? error
             : new Error('扩展后台服务不可用')
       onError?.(normalizedError)
-      return { close }
+      return { close, cancel }
     }
 
     port.onMessage.addListener((message) => {
@@ -162,6 +177,13 @@ export const backendClient = {
 
       if (message.type === FASTFLOW_STREAM_EVENT) {
         onEvent?.(message.payload)
+        return
+      }
+
+      if (message.type === FASTFLOW_STREAM_CANCELLED) {
+        isClosed = true
+        onComplete?.({ cancelled: true })
+        port.disconnect()
         return
       }
 
@@ -182,6 +204,10 @@ export const backendClient = {
     port.onDisconnect.addListener(() => {
       if (isClosed) return
       isClosed = true
+      if (isCancelling) {
+        onComplete?.({ cancelled: true })
+        return
+      }
       if (chrome.runtime?.lastError) {
         const runtimeError = buildRuntimeError('后台流式服务已断开')
         onError?.(
@@ -217,6 +243,6 @@ export const backendClient = {
       }
     }
 
-    return { close }
+    return { close, cancel }
   }
 }

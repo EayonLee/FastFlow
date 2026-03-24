@@ -5,6 +5,8 @@ import { resolveChannelConfig, resolveReleaseChannel } from '@/extension/config/
 import {
   FASTFLOW_HTTP_REQUEST,
   FASTFLOW_HTTP_RESPONSE,
+  FASTFLOW_STREAM_CANCEL,
+  FASTFLOW_STREAM_CANCELLED,
   FASTFLOW_STREAM_CLOSE,
   FASTFLOW_STREAM_ERROR,
   FASTFLOW_STREAM_EVENT,
@@ -157,51 +159,62 @@ async function handleHttpRequest(payload) {
  * - 页面侧不能直接请求 HTTP 后端，否则会落入 Mixed Content / CORS / 宿主页隔离问题。
  * - 后台层负责读取 SSE，页面只消费已经解析好的业务事件。
  */
-async function handleStream(port, payload, controller) {
+async function handleStream(port, payload, streamState) {
   const decoder = new TextDecoder()
   let reader = null
-  let streamClosed = false
+  let seenDoneSentinel = false
+  let seenRunCompleted = false
+  let seenErrorEvent = false
+
   const postMessage = (message) => {
     try {
       port.postMessage(message)
     } catch {
-      controller.abort()
+      streamState.closed = true
+      streamState.controller?.abort()
     }
   }
+
+  const postStreamError = (error) => {
+    if (streamState.closed || streamState.cancelled) return
+    seenErrorEvent = true
+    postMessage({
+      type: FASTFLOW_STREAM_ERROR,
+      error
+    })
+    reader?.cancel().catch(() => {})
+    streamState.controller?.abort()
+  }
+
   const closeStream = () => {
-    if (streamClosed) return
-    streamClosed = true
+    if (streamState.closed || streamState.cancelled) return
+    streamState.closed = true
     postMessage({
       type: FASTFLOW_STREAM_CLOSE,
       payload: null
     })
     reader?.cancel().catch(() => {})
-    controller.abort()
+    streamState.controller?.abort()
   }
 
   try {
     const response = await fetch(
       buildServiceUrl(payload.service, payload.path),
-      createFetchOptions(payload, controller.signal)
+      createFetchOptions(payload, streamState.controller.signal)
     )
 
     if (!response.ok) {
       const errorBody = await parseResponseBody(response)
-      postMessage({
-        type: FASTFLOW_STREAM_ERROR,
-        error:
-          (errorBody && typeof errorBody === 'object' && (errorBody.message || errorBody.detail?.message)) ||
-          (typeof errorBody === 'string' && errorBody) ||
-          `Request failed with status ${response.status}`
-      })
+      postStreamError(
+        (errorBody && typeof errorBody === 'object' && (errorBody.message || errorBody.detail?.message)) ||
+        (typeof errorBody === 'string' && errorBody) ||
+        `Request failed with status ${response.status}`
+      )
       return
     }
 
     if (!response.body) {
-      postMessage({
-        type: FASTFLOW_STREAM_ERROR,
-        error: '流式响应体为空'
-      })
+      postStreamError('流式响应体为空')
       return
     }
 
@@ -211,17 +224,31 @@ async function handleStream(port, payload, controller) {
         const rawData = event?.data
         if (!rawData) return
         if (rawData === '[DONE]') {
+          seenDoneSentinel = true
+          // `[DONE]` 只是传输结束哨兵；在看到业务完成态之前收到它，说明后端协议有问题。
+          if (!seenRunCompleted && !seenErrorEvent) {
+            postStreamError('SSE 会话在收到 run.completed 之前提前结束')
+            return
+          }
           closeStream()
           return
         }
 
         try {
+          const payload = JSON.parse(rawData)
+          // Background 不解释业务内容，只维护协议状态，并把事件立即转发给前端。
+          if (payload?.type === 'run.completed') {
+            seenRunCompleted = true
+          }
+          if (payload?.type === 'error') {
+            seenErrorEvent = true
+          }
           postMessage({
             type: FASTFLOW_STREAM_EVENT,
-            payload: JSON.parse(rawData)
+            payload
           })
         } catch {
-          // SSE 单条事件解析失败时跳过，不中断整条会话。
+          postStreamError('SSE 事件解析失败')
         }
       }
     })
@@ -229,23 +256,23 @@ async function handleStream(port, payload, controller) {
     while (true) {
       const { done, value } = await reader.read()
       if (done) {
-        if (!streamClosed) {
+        if (!streamState.closed && !streamState.cancelled) {
           parser.feed(decoder.decode())
-          closeStream()
+          // EOF 早于 `[DONE]` 也属于协议错误，不能静默当成成功关闭。
+          if (!seenDoneSentinel) {
+            postStreamError('SSE 会话在收到 [DONE] 之前提前断开')
+          }
         }
         break
       }
       parser.feed(decoder.decode(value, { stream: true }))
-      if (streamClosed) break
+      if (streamState.closed || streamState.cancelled) break
     }
   } catch (error) {
-    if (streamClosed || controller.signal.aborted) return
-    postMessage({
-      type: FASTFLOW_STREAM_ERROR,
-      error: error instanceof Error ? error.message : '流式请求失败'
-    })
+    if (streamState.closed || streamState.cancelled || streamState.controller.signal.aborted) return
+    postStreamError(error instanceof Error ? error.message : '流式请求失败')
   } finally {
-    controller.abort()
+    streamState.controller.abort()
   }
 }
 
@@ -275,17 +302,45 @@ function handleRuntimeMessage(message, _sender, sendResponse) {
 function handleRuntimeConnect(port) {
   if (port.name !== FASTFLOW_STREAM_PORT) return
 
-  let closed = false
-  let controller = null
+  const streamState = {
+    closed: false,
+    cancelled: false,
+    controller: null,
+  }
+
+  const notifyCancelled = () => {
+    if (streamState.closed) return
+    streamState.closed = true
+    try {
+      port.postMessage({
+        type: FASTFLOW_STREAM_CANCELLED,
+        payload: null,
+      })
+    } catch {
+      // ignore
+    }
+  }
+
   port.onDisconnect.addListener(() => {
-    closed = true
-    controller?.abort()
+    streamState.closed = true
+    streamState.cancelled = true
+    streamState.controller?.abort()
   })
 
   port.onMessage.addListener((message) => {
-    if (closed || !message || message.type !== FASTFLOW_STREAM_OPEN) return
-    controller = new AbortController()
-    handleStream(port, message.payload, controller)
+    if (streamState.closed || !message) return
+
+    if (message.type === FASTFLOW_STREAM_CANCEL) {
+      if (streamState.cancelled) return
+      streamState.cancelled = true
+      streamState.controller?.abort()
+      notifyCancelled()
+      return
+    }
+
+    if (message.type !== FASTFLOW_STREAM_OPEN) return
+    streamState.controller = new AbortController()
+    handleStream(port, message.payload, streamState)
   })
 }
 

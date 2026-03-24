@@ -5,7 +5,8 @@ from typing import Any, AsyncGenerator, Dict
 from nexus.agents.chat import ChatAgent
 from nexus.common.exceptions import BusinessError
 from nexus.config.logger import get_logger
-from nexus.core.event import build_run_completed_event, build_run_started_event
+from nexus.core.agent_runtime import RunCancellationContext, RunCancelledError
+from nexus.core.event import build_run_started_event
 from nexus.core.schemas import ChatRequestContext
 
 logger = get_logger(__name__)
@@ -18,7 +19,11 @@ def _to_sse(payload: Dict[str, object]) -> str:
 
 class AgentService:
     """
-    智能体服务层
+    智能体服务层。
+
+    这里只负责两件事：
+    1. 给业务事件补齐 SSE 元数据。
+    2. 在业务流结束后补发传输层的 `[DONE]` 哨兵。
     """
 
     def __init__(self, chat_agent: ChatAgent):
@@ -59,27 +64,48 @@ class AgentService:
                 seq=event_seq,
             )
         )
-        event_seq += 1
-        yield _to_sse(
-            self._enrich_event(
-                build_run_completed_event(final_answer_len=0),
-                session_id=session_id,
-                seq=event_seq,
-            )
-        )
         yield SSE_DONE
 
     async def handle_chat_request(self, context: ChatRequestContext) -> AsyncGenerator[str, None]:
-        """处理对话型智能体请求。"""
+        """
+        处理对话型智能体请求。
+
+        约定：
+        - `ChatAgent` 负责产出业务事件，如 `answer.delta` / `run.completed`
+        - `AgentService` 只负责把这些事件编码成 SSE，并在末尾补一个 `[DONE]`
+        """
+        cancellation_context = RunCancellationContext()
+        async for event in self.handle_chat_request_with_cancellation(
+            context,
+            cancellation_context=cancellation_context,
+        ):
+            yield event
+
+    async def handle_chat_request_with_cancellation(
+        self,
+        context: ChatRequestContext,
+        *,
+        cancellation_context: RunCancellationContext,
+    ) -> AsyncGenerator[str, None]:
+        """处理带取消上下文的 chat 请求。"""
         event_seq = 1
         try:
-            async for event in self.chat_agent.achat(context):
+            async for event in self.chat_agent.achat(
+                context,
+                cancellation_context=cancellation_context,
+            ):
                 if not isinstance(event, dict):
                     raise TypeError(f"invalid agent event type: {type(event)}")
                 yield _to_sse(
                     self._enrich_event(event, session_id=context.session_id or "", seq=event_seq)
                 )
                 event_seq += 1
+        except RunCancelledError:
+            logger.info(
+                "[SSE 会话取消] agent=chat session_id=%s reason=%s",
+                context.session_id or "",
+                cancellation_context.reason,
+            )
         except BusinessError as e:
             logger.error("ChatAgent error: %s", e)
             yield _to_sse(
@@ -99,6 +125,8 @@ class AgentService:
                 )
             )
 
+        # `[DONE]` 只表示 SSE 传输结束，不承担业务成功语义。
+        logger.info("[SSE 会话完成] agent=chat session_id=%s", context.session_id or "")
         yield SSE_DONE
 
     async def handle_builder_request(self, context: ChatRequestContext) -> AsyncGenerator[str, None]:

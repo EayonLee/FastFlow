@@ -10,14 +10,13 @@ Skill 工具（本地 skill runtime）。
 from __future__ import annotations
 
 import json
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from langchain_core.tools import tool
 
 from nexus.config.logger import get_logger, log_tool_failure, log_tool_success
 from nexus.core.schemas import ChatRequestContext
 from nexus.core.skills import SkillRuntime
-
 logger = get_logger(__name__)
 
 
@@ -92,6 +91,10 @@ class SkillTools:
 def build_skill_tools(context: ChatRequestContext) -> Tuple[List, SkillTools]:
     """
     构建 Skill 工具列表。
+
+    返回：
+    - tools：LangChain 工具列表
+    - tool_impl：实现对象
     """
     tool_impl = SkillTools(context)
 
@@ -121,7 +124,8 @@ def build_skill_tools(context: ChatRequestContext) -> Tuple[List, SkillTools]:
         """
         return tool_impl.load_skill_resource(skill_name, resource_path)
 
-    return [list_skills, load_skill, load_skill_resource], tool_impl
+    tools = [list_skills, load_skill, load_skill_resource]
+    return tools, tool_impl
 
 
 __all__ = ["SkillTools", "build_skill_tools"]

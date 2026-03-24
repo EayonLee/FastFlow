@@ -108,6 +108,9 @@ def extract_text_from_stream_content(content: Any) -> str:
                 continue
             if not isinstance(item, dict):
                 continue
+            item_type = str(item.get("type") or "").strip().lower()
+            if item_type in {"reasoning", "thinking"}:
+                continue
             text = str(item.get("text") or item.get("content") or "").strip()
             if text:
                 parts.append(text)

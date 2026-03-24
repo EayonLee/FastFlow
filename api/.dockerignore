@@ -1,5 +1,5 @@
 target/*
-!target/api-1.0-SNAPSHOT.jar
+!target/api-*.jar
 .idea/
 *.iml
 sql/

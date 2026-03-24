@@ -4,7 +4,7 @@ import { createProtocolTokenNode, createTriggerRegex, normalizeString } from './
 /**
  * Skill 协议定义：
  * - trigger: /
- * - token: selected_skill(<skill_name>)
+ * - token: 技能引用标签
  * - 数据源: /clash/catalog 返回的 skills
  */
 const MODE = 'skill'
@@ -20,7 +20,7 @@ const tokenNode = createProtocolTokenNode({
     },
   },
   getLabel: (attrs) => String(attrs.name || ''),
-  serializeText: (attrs) => `selected_skill(${String(attrs.name || '')})`,
+  serializeText: (attrs) => `/${String(attrs.name || '')}`,
 })
 
 function mapSkillOption(rawItem) {
@@ -70,12 +70,6 @@ export const skillProtocol = {
     emptyText: '没有可选 skill',
     hintText: '可直接在输入框输入 / 快速唤起',
     sectionClass: 'skills-section',
-  },
-  secondarySection: {
-    title: 'MCP',
-    badge: 'Coming Soon',
-    sectionClass: 'mcp-section',
-    placeholderText: '开发中...',
   },
   async loadItems() {
     return await loadSkillItems()

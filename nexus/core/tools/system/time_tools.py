@@ -11,14 +11,13 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from langchain_core.tools import tool
 
 from nexus.config.logger import get_logger, log_tool_failure, log_tool_success
 from nexus.core.schemas import ChatRequestContext
-
 logger = get_logger(__name__)
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_TIME_FORMAT = "YYYY-MM-dd HH:mm:ss"
@@ -200,6 +199,10 @@ class TimeTools:
 def build_time_tools(context: ChatRequestContext) -> Tuple[List, TimeTools]:
     """
     构建基础时间工具列表。
+
+    返回：
+    - tools：LangChain 工具列表
+    - tool_impl：实现对象
     """
     tool_impl = TimeTools(context)
 
@@ -223,7 +226,8 @@ def build_time_tools(context: ChatRequestContext) -> Tuple[List, TimeTools]:
         """
         return tool_impl.get_current_timestamp(timezone)
 
-    return [get_current_time, get_current_timestamp], tool_impl
+    tools = [get_current_time, get_current_timestamp]
+    return tools, tool_impl
 
 
 __all__ = ["TimeTools", "build_time_tools"]

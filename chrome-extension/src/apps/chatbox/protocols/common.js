@@ -29,7 +29,7 @@ export function createTriggerRegex(triggerChar, queryPattern, flags = 'i') {
 /**
  * 创建一个“协议 token”节点：
  * - 输入区以标签展示
- * - 序列化为线协议文本（如 selected_skill(...)）
+ * - 序列化仅用于编辑器内部纯文本表示，不承担网络协议职责
  */
 export function createProtocolTokenNode(config) {
   const {

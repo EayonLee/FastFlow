@@ -1,5 +1,14 @@
+"""
+Nexus 全局配置。
+
+约束：
+- 这里只保留跨模块共享的运行时配置；
+- 工具执行、模型流式、日志等配置按职责分区，避免混在一起增加理解成本。
+"""
+
 import os
 from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -17,7 +26,9 @@ class Settings(BaseSettings):
     # - 127.0.0.1: 仅本机访问
     # 注意：本项目已移除 TrustedHostMiddleware，APP_HOST 不再用于 Host Header 白名单校验。
     APP_HOST: str = "0.0.0.0"
-    APP_VERSION: str = "1.0.1"
+    APP_VERSION: str = "1.1.0"
+    BUILD_GIT_SHA: str = "unknown"
+    BUILD_TIME: str = "unknown"
     
     # FastFlow Nexus 服务端配置
     FASTFLOW_API_URL: str = "http://localhost:8080"
@@ -40,6 +51,16 @@ class Settings(BaseSettings):
     TOOL_LOOP_GLOBAL_THRESHOLD: int = 30
     # 工具循环检测窗口：仅观察最近 N 次工具执行历史
     TOOL_LOOP_HISTORY_SIZE: int = 30
+    # 单次工具执行超时（秒）
+    TOOL_EXECUTION_TIMEOUT_SECONDS: int = 15
+
+    # 模型流式运行时配置
+    # 模型流式调用：首个流式事件的等待超时（秒）
+    MODEL_STREAM_FIRST_EVENT_TIMEOUT_SECONDS: int = 180
+    # 模型流式调用：流开始后允许的空闲超时（秒）
+    MODEL_STREAM_IDLE_TIMEOUT_SECONDS: int = 150
+    # 模型流式调用：单轮总超时（秒）
+    MODEL_STREAM_TOTAL_TIMEOUT_SECONDS: int = 420
 
     # 日志配置
     LOG_LEVEL: str = "INFO"

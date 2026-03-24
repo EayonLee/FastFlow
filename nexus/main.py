@@ -3,12 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
 from nexus.api.routes.router import base_router
+from nexus.config.build_info import get_build_info
 from nexus.config.config import get_config
 from nexus.config.logger import setup_logging, get_logger
 from nexus.common.exception_handler import register_exception_handlers
 
 # 获取配置实例
 settings = get_config()
+build_info = get_build_info()
 
 # 设置日志配置
 setup_logging()
@@ -20,7 +22,13 @@ async def lifespan(app: FastAPI):
     应用生命周期管理
     """
     try:
-        logger.info(f"🚀 {settings.APP_NAME} is starting up...")
+        logger.info(
+            "🚀 %s is starting up... version=%s git_sha=%s build_time=%s",
+            settings.APP_NAME,
+            build_info.version,
+            build_info.git_sha,
+            build_info.build_time,
+        )
     except Exception as e:
         logger.error(f"❌ App startup failed: {e}")
         raise
@@ -76,6 +84,9 @@ def main() -> None:
     logger.info(
         f"\n"
         f"      🌟 Server Name    : {settings.APP_NAME}\n"
+        f"      🔖 Version        : {build_info.version}\n"
+        f"      🧬 Git SHA        : {build_info.git_sha}\n"
+        f"      🕒 Build Time     : {build_info.build_time}\n"
         f"      📍 Server Address : http://{display_host}:{settings.APP_PORT}\n"
     )
 
