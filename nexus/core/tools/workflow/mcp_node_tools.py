@@ -25,7 +25,6 @@ from langchain_core.tools import tool
 
 from nexus.config.logger import get_logger, log_tool_failure, log_tool_success
 from nexus.core.schemas import ChatRequestContext
-
 from .context import WorkflowGraphContext
 
 logger = get_logger(__name__)
@@ -429,4 +428,5 @@ def build_workflow_graph_mcp_tools(context: ChatRequestContext) -> Tuple[List, W
         """
         return tool_impl.get_tools_node_mcp_tools(node_id_or_name, handle=handle)
 
-    return [get_toolset_tools, get_tools_node_mcp_tools], tool_impl
+    tools = [get_toolset_tools, get_tools_node_mcp_tools]
+    return tools, tool_impl

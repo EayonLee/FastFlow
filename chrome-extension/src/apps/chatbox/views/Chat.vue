@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { Bot, Bug, MessageSquare, Send, Copy, Check } from 'lucide-vue-next'
+import { Bot, Bug, MessageSquare, Send, Copy, Check, Square } from 'lucide-vue-next'
 import { useDraggable, useStorage, useWindowSize } from '@vueuse/core'
 import FlowSelect from '@/shared/components/FlowSelect.vue'
 import Header from '@/shared/components/Header.vue'
@@ -11,7 +11,6 @@ import AgentThinkingPanel from '@/apps/chatbox/components/AgentThinkingPanel.vue
 import ProtocolComposer from '@/apps/chatbox/components/ProtocolComposer.vue'
 import { useCopyFeedback } from '@/shared/composables/useCopyFeedback.js'
 import { DEFAULT_MIN_HEIGHT, DEFAULT_MIN_WIDTH, useResizable } from '@/shared/composables/useResizable.js'
-import { useStreamTypewriter } from '@/shared/composables/useStreamTypewriter.js'
 import { Bridge } from '@/extension/runtime/bridge.js'
 import { Nexus } from '@/shared/services/nexus.js'
 import { createAuthGuard } from '@/shared/utils/authGuard.js'
@@ -22,13 +21,16 @@ import { renderMarkdown } from '@/shared/utils/markdown.js'
 import { getMermaidSourceByKey, renderMermaidInElement, renderMermaidSource } from '@/shared/utils/mermaid.js'
 import { generateUuid32 } from '@/shared/utils/uuid.js'
 import { useMermaidThemeSync } from '@/apps/chatbox/composables/useMermaidThemeSync.js'
-import { splitProtocolText } from '@/apps/chatbox/protocols/parser.js'
+import { buildRequestPayloadFromSegments, normalizeDisplaySegments } from '@/apps/chatbox/protocols/requestPayload.js'
 import { themeManager } from '@/shared/utils/themeManager.js'
+import { cache } from '@/shared/utils/cache.js'
 
 // 存储 key（用于记住聊天框尺寸）
 const CHAT_SIZE_STORAGE_KEY = 'chat_box_size'
 // 存储 key（用于记住悬浮球吸附位置，按站点 origin 隔离）
 const ANCHOR_STORAGE_KEY = `chat_floating_anchor_v1::${window.location.origin}`
+// 存储 key（用于记住用户上次选择的模型偏好）
+const CHAT_SELECTED_MODEL_STORAGE_KEY = 'chat_selected_model_preference'
 // 交互常量
 const FLOAT_MARGIN = 16
 const FLOAT_BUTTON_SIZE = 50
@@ -37,6 +39,8 @@ const FLOAT_PANEL_MARGIN = 16
 const DEFAULT_PANEL_WIDTH = 700
 // 点击与拖拽判定阈值（像素）：小于该位移按点击处理，避免误触发拖拽
 const DRAG_ACTIVATION_THRESHOLD = 6
+// 距离底部在该阈值内时，认为用户仍在“跟随最新消息”
+const AUTO_SCROLL_BOTTOM_THRESHOLD = 72
 // 默认欢迎语
 const WELCOME_MESSAGE = 'Hi！👋\n' +
     '我是 Nexus，FastFlow 工作流智能助手，可以随时帮你优化或讲解工作流。\n\n' +
@@ -52,7 +56,7 @@ const WELCOME_MESSAGE = 'Hi！👋\n' +
 
 // 聊天窗口展开状态
 const isOpen = ref(false)
-// 输入框序列化后的用户文本（包含 selected_skill(...) / selected_node(...) 协议）
+// 输入框中的自然语言文本（协议 token 通过 displaySegments 单独传输）
 const composerPrompt = ref('')
 // 登录状态（未登录时隐藏小球和聊天框）
 const isAuthed = ref(false)
@@ -86,8 +90,12 @@ const messages = ref([
 const { copiedMap, copyText } = useCopyFeedback()
 // 是否处于发送中（控制按钮禁用与加载动画）
 const isLoading = ref(false)
+const activeStreamSession = ref(null)
+const activeLoadingMessageId = ref('')
 // 消息容器 DOM 引用，用于滚动到末尾
 const messagesContainer = ref(null)
+// 是否允许消息区域自动跟随最新内容滚动
+const shouldFollowLatest = ref(true)
 // 输入组件引用（用于聚焦/清空）
 const protocolComposerRef = ref(null)
 // 聊天容器 DOM 引用，用于拖拽调整尺寸
@@ -351,20 +359,6 @@ function handleResizeStart(dir, event) {
   })
 }
 
-// 流式打字机渲染（将 chunk 按字符节奏展示）
-const streamTypewriter = useStreamTypewriter({
-  charsPerTick: 1,
-  intervalMs: 16,
-  flushOnHidden: true,
-  onText: (id, text) => {
-    updateMessage(id, (target) => {
-      if (target.isLoading) target.isLoading = false
-      target.content = `${target.content || ''}${text}`
-    })
-    scrollToBottom()
-  }
-})
-
 // Mermaid 放大查看（拖拽 + 缩放）
 const mermaidViewerOpen = ref(false)
 const mermaidViewerSvg = ref('')
@@ -402,7 +396,7 @@ function markRuntimeCompleted(messageId) {
   if (!messageId) return
   updateMessage(messageId, (target) => {
     target.runtimeCompleted = true
-    if (target.runtimeStatus !== 'failed') {
+    if (target.runtimeStatus !== 'failed' && target.runtimeStatus !== 'cancelled') {
       target.runtimeStatus = 'completed'
     }
   })
@@ -440,13 +434,32 @@ function updateMessage(id, updater) {
 
 // 写入错误消息并滚动到底部
 function setMessageError(id, message) {
-  // 出错时先清理该消息未输出完的流式队列
-  streamTypewriter.clear(id)
   updateMessage(id, (target) => {
     target.isLoading = false
-    target.content = message
+    if (!String(target.content || '').trim()) {
+      target.content = message
+    }
     target.runtimeCompleted = true
     target.runtimeStatus = 'failed'
+  })
+  scrollToBottom()
+}
+
+function setMessageCancelled(id) {
+  const target = findMessage(id)
+  if (!target || target.runtimeStatus === 'cancelled') return
+
+  appendExecutionEvent(id, {
+    type: 'run.cancelled',
+    message: '已停止生成'
+  })
+  updateMessage(id, (message) => {
+    message.isLoading = false
+    message.runtimeCompleted = true
+    message.runtimeStatus = 'cancelled'
+    if (!String(message.content || '').trim()) {
+      message.content = '已停止生成'
+    }
   })
   scrollToBottom()
 }
@@ -454,17 +467,10 @@ function setMessageError(id, message) {
 // 将流式文本追加到指定消息
 function appendChunkToMessage(id, chunk) {
   if (!chunk) return
-  // 浏览器后台标签页会对定时器强节流：隐藏时直接输出，避免“看起来不继续”。
-  if (document.visibilityState === 'hidden') {
-    streamTypewriter.flush(id)
-    updateMessage(id, (target) => {
-      if (target.isLoading) target.isLoading = false
-      target.content = `${target.content || ''}${chunk}`
-    })
-    scrollToBottom()
-    return
-  }
-  streamTypewriter.enqueue(id, chunk)
+  updateMessage(id, (target) => {
+    target.content = `${target.content || ''}${chunk}`
+  })
+  scrollToBottom()
 }
 
 function appendExecutionEvent(id, event) {
@@ -522,8 +528,6 @@ onUnmounted(() => {
     authGuard.stop()
     authGuard = null
   }
-  // 清理流式打字机定时器
-  streamTypewriter.cleanup()
   resizer.cleanup()
   if (mermaidRenderTimer) {
     clearTimeout(mermaidRenderTimer)
@@ -536,6 +540,9 @@ onUnmounted(() => {
   }
 
   closeMermaidViewer()
+  activeStreamSession.value?.cancel?.()
+  activeStreamSession.value = null
+  activeLoadingMessageId.value = ''
 })
 
 watch(isAuthed, async (val) => {
@@ -590,13 +597,32 @@ async function loadModelConfigs() {
       id: cfg.id,
       label: cfg.modelName || cfg.modelId || `Model ${cfg.id}`
     }))
-    if (!selectedModel.value && models.value.length > 0) {
-      selectedModel.value = models.value[0].id
+    const cachedModelId = await cache.get(CHAT_SELECTED_MODEL_STORAGE_KEY)
+    const hasCurrentSelection = models.value.some((model) => model.id === selectedModel.value)
+    const hasCachedSelection = models.value.some((model) => model.id === cachedModelId)
+
+    if (hasCurrentSelection) {
+      return
     }
+    if (hasCachedSelection) {
+      selectedModel.value = cachedModelId
+      return
+    }
+
+    selectedModel.value = models.value.length > 0 ? models.value[0].id : ''
   } finally {
     isModelLoading.value = false
   }
 }
+
+watch(selectedModel, async (modelId) => {
+  const normalizedModelId = String(modelId || '').trim()
+  if (!normalizedModelId) {
+    await cache.remove(CHAT_SELECTED_MODEL_STORAGE_KEY)
+    return
+  }
+  await cache.set(CHAT_SELECTED_MODEL_STORAGE_KEY, normalizedModelId)
+})
 
 // 切换聊天窗口显示状态
 function toggleChat() {
@@ -609,7 +635,7 @@ function toggleChat() {
   if (isOpen.value) {
     // 展开时滚动到底部并聚焦输入框
     nextTick(() => {
-      scrollToBottom()
+      scrollToBottom({ force: true })
       protocolComposerRef.value?.focusEditor?.()
     })
   }
@@ -620,14 +646,29 @@ function closeChat() {
   isOpen.value = false
 }
 
-// 滚动到底部
-function scrollToBottom() {
+function getDistanceToBottom(container) {
+  if (!container) return 0
+  return Math.max(0, container.scrollHeight - container.scrollTop - container.clientHeight)
+}
+
+function isNearBottom(container) {
+  return getDistanceToBottom(container) <= AUTO_SCROLL_BOTTOM_THRESHOLD
+}
+
+function handleMessagesScroll() {
+  if (!messagesContainer.value) return
+  shouldFollowLatest.value = isNearBottom(messagesContainer.value)
+}
+
+// 滚动到底部。
+// 默认只在用户仍然停留在底部附近时跟随；force=true 用于显式跳到最新位置。
+function scrollToBottom({ force = false } = {}) {
   nextTick(() => {
-    if (messagesContainer.value) {
-      // 强制设置 scrollTop 为 scrollHeight，确保滚动到最底部
-      // 平滑滚动有时候因为内容还在渲染中（例如图片加载或动画）导致计算不准，这里直接跳到最底部
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    }
+    const container = messagesContainer.value
+    if (!container) return
+    if (!force && !shouldFollowLatest.value) return
+    container.scrollTop = container.scrollHeight
+    shouldFollowLatest.value = true
   })
 }
 
@@ -670,7 +711,7 @@ function handleMessagesClick(e) {
 // 添加消息辅助函数
 function addMessage(content, type, extra = {}) {
   messages.value.push(createMessage(content, type, extra))
-  scrollToBottom()
+  scrollToBottom({ force: true })
 }
 
 // 复制消息内容到剪贴板
@@ -687,7 +728,7 @@ function renderUserMessageSegments(message) {
   if (Array.isArray(message?.displaySegments) && message.displaySegments.length > 0) {
     return message.displaySegments
   }
-  return splitProtocolText(message?.content || '')
+  return normalizeDisplaySegments(null, message?.content || '')
 }
 
 function shouldShowRuntimePanels(message) {
@@ -710,16 +751,35 @@ function getComposerSnapshot() {
   const snapshot = protocolComposerRef.value?.buildSnapshot?.()
   if (snapshot && typeof snapshot === 'object') {
     const prompt = String(snapshot.prompt || '')
-    const displaySegments = Array.isArray(snapshot.displaySegments)
-      ? snapshot.displaySegments
-      : splitProtocolText(prompt)
+    const displaySegments = normalizeDisplaySegments(snapshot.displaySegments, prompt)
     return { prompt, displaySegments }
   }
   const prompt = String(composerPrompt.value || '')
   return {
     prompt,
-    displaySegments: splitProtocolText(prompt),
+    displaySegments: normalizeDisplaySegments(null, prompt),
   }
+}
+
+const canSubmitMessage = computed(() => {
+  const snapshot = getComposerSnapshot()
+  return buildRequestPayloadFromSegments(snapshot.displaySegments, snapshot.prompt).hasContent
+})
+
+function clearActiveRequest(session = null) {
+  if (session && activeStreamSession.value !== session) return
+  activeStreamSession.value = null
+  activeLoadingMessageId.value = ''
+  isLoading.value = false
+}
+
+function stopActiveGeneration() {
+  const session = activeStreamSession.value
+  const loadingMessageId = activeLoadingMessageId.value
+  if (!session || !loadingMessageId) return
+  session.cancel()
+  clearActiveRequest(session)
+  setMessageCancelled(loadingMessageId)
 }
 
 // 发送消息处理逻辑
@@ -727,8 +787,9 @@ async function handleGenerate() {
   if (isLoading.value) return
   // 1) 校验输入
   const snapshot = getComposerSnapshot()
-  const prompt = snapshot.prompt.trim()
-  if (!prompt) return
+  const requestPayload = buildRequestPayloadFromSegments(snapshot.displaySegments, snapshot.prompt)
+  if (!requestPayload.hasContent) return
+  const prompt = requestPayload.prompt.trim()
   const isChatAgent = selectedAgent.value === 'chat'
 
   // 2) Chat 模式需要模型配置；Builder / Debug 统一交由 Nexus 返回禁用态消息。
@@ -738,9 +799,7 @@ async function handleGenerate() {
   }
 
   // 3) 添加用户消息
-  const displaySegments = Array.isArray(snapshot.displaySegments)
-    ? snapshot.displaySegments.map((segment) => ({ ...segment }))
-    : splitProtocolText(prompt)
+  const displaySegments = requestPayload.displaySegments.map((segment) => ({ ...segment }))
   addMessage(prompt, 'user', { displaySegments })
   protocolComposerRef.value?.clear?.()
   composerPrompt.value = ''
@@ -748,6 +807,7 @@ async function handleGenerate() {
 
   // 4) 显示加载中消息（用于流式更新）
   const loadingMsgId = generateUuid32() // 使用 32 位 UUID，避免冲突
+  activeLoadingMessageId.value = loadingMsgId
   messages.value.push(
     createMessage('', 'ai', {
       id: loadingMsgId,
@@ -764,20 +824,18 @@ async function handleGenerate() {
       ]
     })
   )
-  scrollToBottom()
+  scrollToBottom({ force: true })
 
   let chatRequestFinalized = false
   const finalizeChatRequest = () => {
     if (!isChatAgent || chatRequestFinalized) return
     chatRequestFinalized = true
-    streamTypewriter.drain(loadingMsgId).then(() => {
-      updateMessage(loadingMsgId, (target) => {
-        if (target.isLoading) target.isLoading = false
-      })
-      markRuntimeCompleted(loadingMsgId)
-      renderMermaidOnceAfterReply()
-      isLoading.value = false
+    updateMessage(loadingMsgId, (target) => {
+      if (target.isLoading) target.isLoading = false
     })
+    markRuntimeCompleted(loadingMsgId)
+    renderMermaidOnceAfterReply()
+    isLoading.value = false
   }
 
   // 5) 仅 Chat 模式需要导出当前工作流配置与元信息。
@@ -795,112 +853,106 @@ async function handleGenerate() {
     } catch (e) {
       setMessageError(loadingMsgId, `Export current workflow graph failed：${e.message}`)
       // 终止本次发送
-      isLoading.value = false
+      clearActiveRequest()
       return
     }
   }
 
   // 6) 调用 Nexus（SSE 流式）
-  Nexus.generateWorkflow(
-    {
-      // 请求参数：prompt + 选中的 agent + 模型 + 会话 + 当前画布
-      prompt,
-      mode: selectedAgent.value,
-      modelConfigId: isChatAgent ? selectedModel.value : null,
-      sessionId: sessionId.value,
-      workflowGraph,
-      workflowMeta
-    },
-    (event) => {
-      if (!event || !event.type) return
-      if (event.type === 'answer.delta') {
-        appendChunkToMessage(loadingMsgId, event.content || '')
-        return
-      }
-      if (event.type === 'answer.done') {
-        finalizeChatRequest()
-        return
-      }
-      if (event.type === 'answer.reset') {
-        streamTypewriter.clear(loadingMsgId)
-        updateMessage(loadingMsgId, (target) => {
-          target.content = ''
-        })
-        appendExecutionEvent(loadingMsgId, event)
-        return
-      }
-      if (event.type === 'thinking.delta') {
-        appendThinkingContent(loadingMsgId, event.content || '', 'append')
-        return
-      }
-      if (event.type === 'thinking.summary') {
-        appendThinkingContent(loadingMsgId, event.content || '', 'replace')
-        return
-      }
-      appendExecutionEvent(loadingMsgId, event)
-      if (event.type === 'run.completed') {
-        finalizeChatRequest()
-      }
-    },
-    (graphData) => {
-      // Chat 智能体不返回图，直接结束
-      if (isChatAgent) {
-        finalizeChatRequest()
-        return
-      }
-
-      // Builder 成功回调 - 更新同一条消息
-      const targetMsg = findMessage(loadingMsgId)
-      if (targetMsg) {
-        // Builder 成功后清理流式队列，防止旧文本继续追加
-        streamTypewriter.clear(loadingMsgId)
-        targetMsg.isLoading = false
-        targetMsg.content = `✅ 生成成功！包含 ${graphData.nodes.length} 个节点。正在排版...`
-        // 内容更新后，重新滚动到底部
-        scrollToBottom()
-      }
-      
-      try {
-        // 应用 Dagre 布局算法
-        const layoutedGraph = Layout.applyDagre(graphData)
-        
-        // 发送渲染请求给页面
-        Bridge.sendRenderRequest(
-          layoutedGraph,
-          () => {
-            if (targetMsg) {
-              // 渲染成功提示
-              targetMsg.content = '🎉 新画布渲染成功！'
-              scrollToBottom()
-            }
-            renderMermaidNow()
-            isLoading.value = false
-          },
-          () => {
-            // 失败回调：仅提示错误，不做降级方案
-            if (targetMsg) {
-              // 渲染失败提示
-              targetMsg.content = '新画布渲染失败：未能将编排应用到页面，请检查页面是否处于可编辑状态。'
-              scrollToBottom()
-            }
-            isLoading.value = false
+  try {
+    const session = Nexus.generateWorkflow(
+      {
+        prompt,
+        executionHints: requestPayload.executionHints,
+        mode: selectedAgent.value,
+        modelConfigId: isChatAgent ? selectedModel.value : null,
+        sessionId: sessionId.value,
+        workflowGraph,
+        workflowMeta
+      },
+      {
+        onEvent(event) {
+          if (!event || !event.type) return
+          if (event.type === 'answer.delta') {
+            appendChunkToMessage(loadingMsgId, event.content || '')
+            return
           }
-        )
-      } catch (e) {
-        if (targetMsg) {
-          // 布局或渲染过程中异常
-          targetMsg.isLoading = false
-          targetMsg.content = `Formatting or Rendering Error: \n${e.message}`
+          if (event.type === 'answer.reset') {
+            updateMessage(loadingMsgId, (target) => {
+              target.content = ''
+            })
+            return
+          }
+          if (event.type === 'thinking.delta') {
+            appendThinkingContent(loadingMsgId, event.content || '', 'append')
+            return
+          }
+          if (event.type === 'thinking.summary') {
+            appendThinkingContent(loadingMsgId, event.content || '', 'replace')
+            return
+          }
+          appendExecutionEvent(loadingMsgId, event)
+          if (event.type === 'run.completed') {
+            finalizeChatRequest()
+          }
+        },
+        onComplete(graphData) {
+          if (isChatAgent) {
+            clearActiveRequest(session)
+            return
+          }
+
+          const targetMsg = findMessage(loadingMsgId)
+          if (targetMsg && graphData) {
+            targetMsg.isLoading = false
+            targetMsg.content = `✅ 生成成功！包含 ${graphData.nodes.length} 个节点。正在排版...`
+            scrollToBottom()
+          }
+
+          try {
+            const layoutedGraph = Layout.applyDagre(graphData)
+            Bridge.sendRenderRequest(
+              layoutedGraph,
+              () => {
+                if (targetMsg) {
+                  targetMsg.content = '🎉 新画布渲染成功！'
+                  scrollToBottom()
+                }
+                renderMermaidNow()
+                clearActiveRequest(session)
+              },
+              () => {
+                if (targetMsg) {
+                  targetMsg.content = '新画布渲染失败：未能将编排应用到页面，请检查页面是否处于可编辑状态。'
+                  scrollToBottom()
+                }
+                clearActiveRequest(session)
+              }
+            )
+          } catch (error) {
+            if (targetMsg) {
+              targetMsg.isLoading = false
+              targetMsg.content = `Formatting or Rendering Error: \n${error.message}`
+            }
+            clearActiveRequest(session)
+          }
+        },
+        onCancelled() {
+          clearActiveRequest(session)
+        },
+        onError(error) {
+          setMessageError(loadingMsgId, `${error.message}`)
+          clearActiveRequest(session)
         }
-        isLoading.value = false
       }
-    },
-    (error) => {
-      // 错误回调 - 更新同一条消息
-      setMessageError(loadingMsgId, `${error.message}`)
-      isLoading.value = false
-    }
-  )
+    )
+    activeStreamSession.value = session
+    session.result.catch(() => {})
+  } catch (error) {
+    setMessageError(loadingMsgId, `${error.message}`)
+    clearActiveRequest()
+    return
+  }
 }
 </script>
 
@@ -941,7 +993,7 @@ async function handleGenerate() {
         />
         
         <!-- 消息区域 -->
-        <div class="messages-area" ref="messagesContainer" @click="handleMessagesClick">
+        <div class="messages-area" ref="messagesContainer" @click="handleMessagesClick" @scroll="handleMessagesScroll">
           <div 
             v-for="msg in messages" 
             :key="msg.id" 
@@ -1020,7 +1072,7 @@ async function handleGenerate() {
             <ProtocolComposer
               ref="protocolComposerRef"
               v-model="composerPrompt"
-              :can-submit="!isLoading"
+              :can-submit="canSubmitMessage && !isLoading"
               placeholder="有问题，尽管问"
               @submit="handleGenerate"
             />
@@ -1063,16 +1115,19 @@ async function handleGenerate() {
                   width="auto"
                   min-width="90px"
                   position="top"
+                  dropdown-align="end"
                 />
 
                 <!-- 发送按钮 -->
                 <button 
                   id="fastflow-send-btn"
                   class="send-btn" 
-                  :disabled="!composerPrompt.trim() || isLoading"
-                  @click="handleGenerate"
+                  :disabled="isLoading ? !activeStreamSession : !canSubmitMessage"
+                  :title="isLoading ? '停止生成' : '发送消息'"
+                  @click="isLoading ? stopActiveGeneration() : handleGenerate()"
                 >
-                  <Send size="16" />
+                  <Square v-if="isLoading" size="14" />
+                  <Send v-else size="16" />
                 </button>
               </div>
             </div>

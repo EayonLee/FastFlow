@@ -11,7 +11,7 @@ ENV TZ=Asia/Shanghai \
 RUN groupadd --system fastflow && useradd --system --gid fastflow --create-home --home-dir /home/fastflow fastflow
 
 # 运行镜像仅打包宿主机已构建好的产物：
-COPY --chown=fastflow:fastflow target/api-1.0-SNAPSHOT.jar /app/app.jar
+COPY --chown=fastflow:fastflow target/api-*.jar /app/app.jar
 
 USER fastflow
 

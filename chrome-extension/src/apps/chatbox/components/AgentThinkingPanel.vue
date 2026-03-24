@@ -27,17 +27,26 @@ const props = defineProps({
 const localOpen = ref(true)
 const EMPTY_THINKING_HINT = '本轮未返回思考内容'
 const EMPTY_THINKING_DETAIL = '本轮未返回思考内容。'
+const CANCELLED_THINKING_HINT = '思考已停止：本轮生成已手动停止'
+const CANCELLED_THINKING_DETAIL = '思考已停止：你已手动终止本轮生成。'
 const FAILED_THINKING_HINT = '思考中断：请求失败'
 const FAILED_THINKING_DETAIL = '思考中断：本次请求失败，请重试或检查模型配置/网络。'
 const dotStep = ref(1)
 let dotTimer = null
+const isCancelled = computed(() => props.runtimeStatus === 'cancelled')
 const isFailed = computed(() => props.runtimeStatus === 'failed')
 const animatedThinkingText = computed(() => `Deep Thinking ${'.'.repeat(dotStep.value)}`)
 const hasContent = computed(() => !!String(props.content || '').trim())
 const shouldRender = computed(() => props.placeholder || hasContent.value)
+const collapsedEmptyHint = computed(() => {
+  if (isCancelled.value) return CANCELLED_THINKING_HINT
+  if (isFailed.value) return FAILED_THINKING_HINT
+  return EMPTY_THINKING_HINT
+})
 const liveLine = computed(() => {
   const merged = String(props.content || '').replace(/\s+/g, ' ').trim()
   if (!merged) {
+    if (isCancelled.value) return CANCELLED_THINKING_HINT
     if (isFailed.value) return FAILED_THINKING_HINT
     return props.completed ? EMPTY_THINKING_HINT : animatedThinkingText.value
   }
@@ -52,6 +61,7 @@ const liveLine = computed(() => {
 })
 const fullThinkingText = computed(() => {
   if (hasContent.value) return props.content
+  if (isCancelled.value) return CANCELLED_THINKING_DETAIL
   if (isFailed.value) return FAILED_THINKING_DETAIL
   return props.completed ? EMPTY_THINKING_DETAIL : animatedThinkingText.value
 })
@@ -68,9 +78,9 @@ function handleToggle(event) {
 }
 
 watch(
-  () => [isFailed.value, props.completed],
-  ([failed, completed]) => {
-    if (failed || completed) {
+  () => [isCancelled.value, isFailed.value, props.completed],
+  ([cancelled, failed, completed]) => {
+    if (cancelled || failed || completed) {
       if (dotTimer) {
         clearInterval(dotTimer)
         dotTimer = null
@@ -106,7 +116,9 @@ onBeforeUnmount(() => {
       <span class="thinking-title">思考过程</span>
       <div class="thinking-collapsed-line">
         <span v-if="!localOpen && completed && hasContent" class="thinking-collapsed-hint">点击展开查看完整内容</span>
-        <span v-else-if="!localOpen && completed && !hasContent" class="thinking-collapsed-hint">{{ EMPTY_THINKING_HINT }}</span>
+        <span v-else-if="!localOpen && completed && !hasContent" class="thinking-collapsed-hint">
+          {{ collapsedEmptyHint }}
+        </span>
         <span v-else-if="localOpen" class="thinking-collapsed-empty"></span>
         <span v-else class="thinking-collapsed-text">{{ liveLine }}</span>
       </div>

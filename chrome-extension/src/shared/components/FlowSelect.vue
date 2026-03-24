@@ -34,6 +34,11 @@ const props = defineProps({
   minWidth: {
     type: String,
     default: '140px'
+  },
+  dropdownAlign: {
+    type: String,
+    default: 'start',
+    validator: (value) => ['start', 'end'].includes(value)
   }
 })
 
@@ -145,7 +150,7 @@ const selectOption = (option) => {
       <div 
         v-if="isOpen" 
         class="select-dropdown"
-        :class="position"
+        :class="[position, `align-${dropdownAlign}`]"
       >
         <!-- 选项列表 -->
         <div 

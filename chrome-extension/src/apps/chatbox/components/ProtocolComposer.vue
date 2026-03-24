@@ -6,8 +6,6 @@ import Placeholder from '@tiptap/extension-placeholder'
 import { getProtocolByMode, protocolRegistry, protocolTokenNodes, detectProtocolByTextBeforeCursor } from '@/apps/chatbox/protocols/registry.js'
 import { normalizeString } from '@/apps/chatbox/protocols/common.js'
 
-const DEFAULT_PROTOCOL_MODE = 'skill'
-
 const props = defineProps({
   modelValue: {
     type: String,
@@ -31,7 +29,7 @@ const emit = defineEmits(['update:modelValue', 'submit'])
 
 // 通用面板状态机：协议类型、query、触发替换范围、键盘高亮索引。
 const panelVisible = ref(false)
-const panelMode = ref(DEFAULT_PROTOCOL_MODE)
+const panelMode = ref('')
 const panelQuery = ref('')
 const panelRange = ref(null)
 const activeIndex = ref(-1)
@@ -54,14 +52,14 @@ function clearAutoOpenSuppression() {
 
 function setAutoOpenSuppression(mode) {
   autoOpenSuppression.mode = normalizeString(mode)
-  autoOpenSuppression.text = serializeEditorText()
+  autoOpenSuppression.text = serializeEditorState()
 }
 
 function isAutoOpenSuppressed(mode) {
   const suppressedMode = normalizeString(autoOpenSuppression.mode)
   if (!suppressedMode || suppressedMode !== normalizeString(mode)) return false
 
-  const currentText = serializeEditorText()
+  const currentText = serializeEditorState()
   if (currentText !== autoOpenSuppression.text) {
     clearAutoOpenSuppression()
     return false
@@ -322,6 +320,22 @@ function showPanelHint(hintText) {
 function serializeEditorText() {
   const instance = editor.value
   if (!instance) return ''
+  const parts = []
+  instance.state.doc.descendants((node) => {
+    if (node.type.name === 'text') {
+      parts.push(String(node.text || ''))
+      return
+    }
+    if (node.type.name === 'hardBreak') {
+      parts.push('\n')
+    }
+  })
+  return parts.join('').replace(/\u00a0/g, ' ')
+}
+
+function serializeEditorState() {
+  const instance = editor.value
+  if (!instance) return ''
   return instance.getText({ blockSeparator: '\n' }).replace(/\u00a0/g, ' ')
 }
 
@@ -392,7 +406,7 @@ function emitSerializedPrompt() {
 
 function closePanel() {
   panelVisible.value = false
-  panelMode.value = DEFAULT_PROTOCOL_MODE
+  panelMode.value = ''
   panelQuery.value = ''
   panelRange.value = null
   activeIndex.value = -1
@@ -483,7 +497,6 @@ function onOptionClick(option) {
 }
 
 function onEditorClick() {
-  ensureProtocolCatalogLoaded(getProtocolByMode(DEFAULT_PROTOCOL_MODE))
   updatePanelStateByCursor()
 }
 
@@ -510,7 +523,7 @@ async function triggerProtocolFromButton(mode) {
 
   // 未命中面板时，模拟输入 triggerChar，复用同一触发链路。
   if (!(panelVisible.value && panelMode.value === protocol.mode)) {
-    const currentText = serializeEditorText()
+    const currentText = serializeEditorState()
     const needLeadingSpace = !!currentText && !/\s$/.test(currentText)
     instance
       .chain()
@@ -537,7 +550,6 @@ async function triggerHashFromButton() {
 function focusEditor() {
   if (!editor.value) return
   editor.value.commands.focus('end')
-  ensureProtocolCatalogLoaded(getProtocolByMode(DEFAULT_PROTOCOL_MODE))
 }
 
 function clear() {
@@ -621,22 +633,6 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <template v-if="activeProtocol.secondarySection && !activeCatalogState.loading && !activeCatalogState.error">
-        <div class="protocol-divider skill-slash-divider"></div>
-
-        <div class="protocol-section skill-slash-section" :class="activeProtocol.secondarySection.sectionClass">
-          <div class="protocol-header skill-slash-header">
-            <span class="protocol-header-title skill-slash-header-title">{{ activeProtocol.secondarySection.title }}</span>
-            <span class="protocol-header-badge skill-slash-header-badge">{{ activeProtocol.secondarySection.badge }}</span>
-          </div>
-
-          <div class="protocol-item skill-slash-item is-disabled is-placeholder">
-            <div class="protocol-item-line skill-slash-item-line">
-              <span class="protocol-item-desc skill-slash-item-desc only">{{ activeProtocol.secondarySection.placeholderText }}</span>
-            </div>
-          </div>
-        </div>
-      </template>
     </div>
   </div>
 </template>
