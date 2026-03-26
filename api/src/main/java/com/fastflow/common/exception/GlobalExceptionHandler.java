@@ -1,12 +1,14 @@
 package com.fastflow.common.exception;
 
 import com.fastflow.common.result.RestfulResult;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -73,6 +75,23 @@ public class GlobalExceptionHandler {
         return RestfulResult.error(400, message, Map.of("fieldErrors", fieldErrors));
     }
 
+    /**
+     * 处理静态资源不存在异常（例如请求 "/."）。
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public RestfulResult handleNoResourceFoundException(NoResourceFoundException e, HttpServletRequest request) {
+        log.warn(
+                "No static resource. request=\"{} {} {}\" remote_addr={} x_forwarded_for=\"{}\" user_agent=\"{}\" resource_path={}",
+                request.getMethod(),
+                request.getRequestURI(),
+                request.getProtocol(),
+                safeValue(request.getRemoteAddr()),
+                safeValue(request.getHeader("X-Forwarded-For")),
+                safeValue(request.getHeader("User-Agent")),
+                safeValue(e.getResourcePath())
+        );
+        return RestfulResult.error(404, "资源不存在");
+    }
 
     /**
      * 处理其他未捕获的系统异常
@@ -84,5 +103,12 @@ public class GlobalExceptionHandler {
     public RestfulResult handleException(Exception e) {
         log.error(e.getMessage(), e);
         return RestfulResult.error(-1, "系统繁忙，请稍后重试");
+    }
+
+    private String safeValue(String value) {
+        if (value == null || value.isBlank()) {
+            return "-";
+        }
+        return value;
     }
 }

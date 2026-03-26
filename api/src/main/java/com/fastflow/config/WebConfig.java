@@ -1,5 +1,6 @@
 package com.fastflow.config;
 
+import com.fastflow.common.interceptor.AccessLogInterceptor;
 import com.fastflow.common.interceptor.LoginInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
@@ -15,10 +16,15 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
     @Autowired
+    private AccessLogInterceptor accessLogInterceptor;
+
+    @Autowired
     private LoginInterceptor loginInterceptor;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(accessLogInterceptor).addPathPatterns("/**");
+
         registry.addInterceptor(loginInterceptor)
                 .addPathPatterns("/**")
                 .excludePathPatterns("/fastflow/api/v1/auth/login", "/fastflow/api/v1/auth/register");

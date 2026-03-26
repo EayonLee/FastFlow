@@ -23,6 +23,7 @@ import {
  * - 固定后端地址来自共享配置，不允许根据页面地址动态推导。
  */
 const DEFAULT_HTTP_TIMEOUT_MS = 30 * 1000
+const STREAM_CANCEL_REQUEST_TIMEOUT_MS = 800
 let backgroundInitialized = false
 let cachedServiceBaseUrl = null
 
@@ -115,6 +116,40 @@ async function parseResponseBody(response) {
   return await response.text().catch(() => '')
 }
 
+function extractErrorMessageFromBody(errorBody, fallbackMessage) {
+  if (typeof errorBody === 'string' && errorBody.trim()) {
+    return errorBody.trim()
+  }
+
+  if (!errorBody || typeof errorBody !== 'object') {
+    return fallbackMessage
+  }
+
+  const directMessage = String(errorBody.message || '').trim()
+  if (directMessage) return directMessage
+
+  const detail = errorBody.detail
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail.trim()
+  }
+  if (detail && typeof detail === 'object') {
+    const detailMessage = String(detail.message || '').trim()
+    if (detailMessage) return detailMessage
+  }
+  if (Array.isArray(detail) && detail.length > 0) {
+    const firstDetail = detail[0]
+    if (typeof firstDetail === 'string' && firstDetail.trim()) {
+      return firstDetail.trim()
+    }
+    if (firstDetail && typeof firstDetail === 'object') {
+      const firstDetailMessage = String(firstDetail.msg || firstDetail.message || '').trim()
+      if (firstDetailMessage) return firstDetailMessage
+    }
+  }
+
+  return fallbackMessage
+}
+
 /**
  * 处理普通 HTTP 请求。
  */
@@ -152,6 +187,81 @@ async function handleHttpRequest(payload) {
   }
 }
 
+function tryParseJsonBody(body) {
+  if (body == null) return null
+  if (typeof body === 'object') return body
+  if (typeof body !== 'string') return null
+
+  try {
+    return JSON.parse(body)
+  } catch {
+    return null
+  }
+}
+
+function extractStreamCancelPayload(payload) {
+  if (!payload || payload.service !== 'nexus') return null
+
+  const body = tryParseJsonBody(payload.body)
+  const sessionId = String(body?.session_id || '').trim()
+  const requestId = String(body?.request_id || '').trim()
+  if (!sessionId || !requestId) return null
+
+  return {
+    headers: payload.headers || {},
+    body: {
+      session_id: sessionId,
+      request_id: requestId,
+    }
+  }
+}
+
+async function requestStreamCancellation(streamState) {
+  const cancelPayload = extractStreamCancelPayload(streamState.requestPayload)
+  if (!cancelPayload) {
+    return {
+      status: 'not_cancellable',
+      accepted: false
+    }
+  }
+
+  const requestControl = createAbortSignal(STREAM_CANCEL_REQUEST_TIMEOUT_MS)
+  try {
+    const response = await fetch(
+      buildServiceUrl('nexus', '/fastflow/nexus/v1/agent/chat/cancel'),
+      createFetchOptions(
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...cancelPayload.headers,
+          },
+          body: JSON.stringify(cancelPayload.body),
+        },
+        requestControl.signal,
+      ),
+    )
+    const responseBody = await parseResponseBody(response)
+    if (!response.ok) {
+      return {
+        status: 'cancel_request_failed',
+        accepted: false
+      }
+    }
+    return {
+      status: String(responseBody?.data?.status || '').trim() || 'cancel_request_failed',
+      accepted: Boolean(responseBody?.data?.accepted),
+    }
+  } catch {
+    return {
+      status: 'cancel_request_failed',
+      accepted: false
+    }
+  } finally {
+    requestControl.cleanup()
+  }
+}
+
 /**
  * 处理 Nexus 的 SSE 流式请求，并把流事件转发给页面侧。
  *
@@ -162,11 +272,11 @@ async function handleHttpRequest(payload) {
 async function handleStream(port, payload, streamState) {
   const decoder = new TextDecoder()
   let reader = null
-  let seenDoneSentinel = false
   let seenRunCompleted = false
   let seenErrorEvent = false
 
   const postMessage = (message) => {
+    if (streamState.clientDetached) return
     try {
       port.postMessage(message)
     } catch {
@@ -205,11 +315,14 @@ async function handleStream(port, payload, streamState) {
 
     if (!response.ok) {
       const errorBody = await parseResponseBody(response)
-      postStreamError(
-        (errorBody && typeof errorBody === 'object' && (errorBody.message || errorBody.detail?.message)) ||
-        (typeof errorBody === 'string' && errorBody) ||
-        `Request failed with status ${response.status}`
-      )
+      postStreamError(extractErrorMessageFromBody(errorBody, `Request failed with status ${response.status}`))
+      return
+    }
+
+    const contentType = String(response.headers.get('content-type') || '').toLowerCase()
+    if (!contentType.includes('text/event-stream')) {
+      const errorBody = await parseResponseBody(response)
+      postStreamError(extractErrorMessageFromBody(errorBody, '服务端未返回 SSE 流'))
       return
     }
 
@@ -223,16 +336,6 @@ async function handleStream(port, payload, streamState) {
       onEvent(event) {
         const rawData = event?.data
         if (!rawData) return
-        if (rawData === '[DONE]') {
-          seenDoneSentinel = true
-          // `[DONE]` 只是传输结束哨兵；在看到业务完成态之前收到它，说明后端协议有问题。
-          if (!seenRunCompleted && !seenErrorEvent) {
-            postStreamError('SSE 会话在收到 run.completed 之前提前结束')
-            return
-          }
-          closeStream()
-          return
-        }
 
         try {
           const payload = JSON.parse(rawData)
@@ -258,9 +361,11 @@ async function handleStream(port, payload, streamState) {
       if (done) {
         if (!streamState.closed && !streamState.cancelled) {
           parser.feed(decoder.decode())
-          // EOF 早于 `[DONE]` 也属于协议错误，不能静默当成成功关闭。
-          if (!seenDoneSentinel) {
-            postStreamError('SSE 会话在收到 [DONE] 之前提前断开')
+          // 新协议下，EOF 时必须已经见到业务终态。
+          if (seenRunCompleted || seenErrorEvent) {
+            closeStream()
+          } else {
+            postStreamError('SSE 会话在收到终态事件之前提前断开')
           }
         }
         break
@@ -305,16 +410,20 @@ function handleRuntimeConnect(port) {
   const streamState = {
     closed: false,
     cancelled: false,
+    cancelRequested: false,
+    clientDetached: false,
+    cancelRequestFinished: false,
     controller: null,
+    requestPayload: null,
   }
 
-  const notifyCancelled = () => {
-    if (streamState.closed) return
+  const notifyCancelled = (payload = null) => {
+    if (streamState.closed || streamState.clientDetached) return
     streamState.closed = true
     try {
       port.postMessage({
         type: FASTFLOW_STREAM_CANCELLED,
-        payload: null,
+        payload,
       })
     } catch {
       // ignore
@@ -322,6 +431,10 @@ function handleRuntimeConnect(port) {
   }
 
   port.onDisconnect.addListener(() => {
+    streamState.clientDetached = true
+    if (streamState.cancelRequested && !streamState.cancelled) {
+      return
+    }
     streamState.closed = true
     streamState.cancelled = true
     streamState.controller?.abort()
@@ -331,15 +444,37 @@ function handleRuntimeConnect(port) {
     if (streamState.closed || !message) return
 
     if (message.type === FASTFLOW_STREAM_CANCEL) {
-      if (streamState.cancelled) return
-      streamState.cancelled = true
-      streamState.controller?.abort()
-      notifyCancelled()
+      if (streamState.cancelRequested || streamState.cancelled) return
+      streamState.cancelRequested = true
+      // 取消顺序必须是：
+      // 1. 先把取消信号投递给后端活跃运行
+      // 2. 再中断主 SSE 连接
+      // 这样后端日志会先记录取消动作，再记录终态事件，时序更稳定。
+      void requestStreamCancellation(streamState)
+        .then((result) => {
+          if (!result.accepted) {
+            console.warn('[FastFlow] backend cancel request was not accepted', result)
+          }
+          return result
+        })
+        .catch(() => {
+          return {
+            status: 'cancel_request_failed',
+            accepted: false
+          }
+        })
+        .then((result) => {
+          streamState.cancelRequestFinished = true
+          streamState.cancelled = true
+          streamState.controller?.abort()
+          notifyCancelled(result)
+        })
       return
     }
 
     if (message.type !== FASTFLOW_STREAM_OPEN) return
     streamState.controller = new AbortController()
+    streamState.requestPayload = message.payload
     handleStream(port, message.payload, streamState)
   })
 }

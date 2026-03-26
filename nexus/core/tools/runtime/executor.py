@@ -18,13 +18,19 @@ from langchain_core.messages import AIMessage, ToolMessage
 
 from nexus.config.config import get_config
 from nexus.config.logger import get_logger
-from nexus.core.agent_runtime.cancellation import RunCancellationContext, await_with_cancellation
+from nexus.core.agent_runtime.cancellation import (
+    RunCancelledError,
+    RunCancellationContext,
+    await_with_cancellation,
+)
 from nexus.core.policies import build_tool_execution_signature
 from nexus.core.tools.runtime.contracts import (
     TOOL_CALL_SOURCE_MODEL,
     ToolCallSource,
     ToolCatalog,
+    ToolExecutionSpec,
 )
+from nexus.core.tools.runtime.process_runner import IsolatedToolProcessRunner
 
 logger = get_logger(__name__)
 settings = get_config()
@@ -70,6 +76,22 @@ def _serialize_tool_output(result: Any) -> str:
 
 def _serialize_tool_args_for_log(tool_args: dict[str, Any]) -> str:
     return json.dumps(tool_args, ensure_ascii=False, sort_keys=True)
+
+
+def _build_tool_cancel_action(tool: Any) -> Any:
+    explicit_cancel = getattr(tool, "cancel", None)
+    if callable(explicit_cancel):
+        return explicit_cancel
+
+    async_cancel = getattr(tool, "aclose", None)
+    if callable(async_cancel):
+        return async_cancel
+
+    sync_cancel = getattr(tool, "close", None)
+    if callable(sync_cancel):
+        return sync_cancel
+
+    return None
 
 
 def _build_error_tool_message(
@@ -140,17 +162,35 @@ class ToolExecutor:
         if self._cancellation_context is not None:
             self._cancellation_context.raise_if_cancelled()
 
+    def _resolve_tool_spec(self, tool_name: str) -> ToolExecutionSpec | None:
+        execution_specs_by_name = getattr(self._tool_catalog, "execution_specs_by_name", {}) or {}
+        tool_spec = execution_specs_by_name.get(tool_name)
+        if tool_spec is not None:
+            return tool_spec
+
+        tool = self._tool_catalog.registry_by_name.get(tool_name)
+        if tool is None:
+            return None
+        return ToolExecutionSpec(tool=tool)
+
     async def _execute_tool_call(self, tool_call: dict[str, Any], source: ToolCallSource) -> ToolMessage:
         tool_name = str(tool_call.get("name") or "").strip()
         tool_call_id = str(tool_call.get("id") or "").strip()
         tool_args = _normalize_tool_args(tool_call.get("args"))
         tool_args_json = _serialize_tool_args_for_log(tool_args)
-        tool = self._tool_catalog.registry_by_name.get(tool_name)
+        tool_spec = self._resolve_tool_spec(tool_name)
 
         self._raise_if_cancelled()
 
         logger.info(
-            "[工具调用开始] source=%s tool=%s tool_call_id=%s tool_args=%s timeout_seconds=%d",
+            "[模型工具调用] source=%s tool=%s tool_call_id=%s mode=%s",
+            source,
+            tool_name,
+            tool_call_id,
+            tool_spec.mode if tool_spec is not None else "unknown",
+        )
+        logger.debug(
+            "[工具调用参数] source=%s tool=%s tool_call_id=%s tool_args=%s timeout_seconds=%d",
             source,
             tool_name,
             tool_call_id,
@@ -158,7 +198,7 @@ class ToolExecutor:
             self._timeout_seconds,
         )
 
-        if tool is None:
+        if tool_spec is None:
             logger.error(
                 "[工具调用失败] source=%s tool=%s tool_call_id=%s tool_args=%s error=tool_not_found",
                 source,
@@ -174,21 +214,46 @@ class ToolExecutor:
             )
 
         started_at = perf_counter()
+        tool = tool_spec.tool
         try:
-            tool_result = await await_with_cancellation(
-                tool.ainvoke(tool_args),
-                cancellation_context=self._cancellation_context,
-                timeout=self._timeout_seconds,
-            )
+            if tool_spec.mode == "isolated_process":
+                if tool_spec.process_target is None:
+                    raise RuntimeError(f"isolated_process tool missing process_target: {tool_name}")
+                process_runner = IsolatedToolProcessRunner(
+                    process_target=tool_spec.process_target,
+                    tool_args=tool_args,
+                    tool_name=tool_name,
+                )
+                tool_result = await await_with_cancellation(
+                    process_runner.run(),
+                    cancellation_context=self._cancellation_context,
+                    timeout=self._timeout_seconds,
+                    cancel_action=process_runner.cancel,
+                    operation_name=f"tool:{tool_name}:isolated_process",
+                )
+            else:
+                tool_result = await await_with_cancellation(
+                    tool.ainvoke(tool_args),
+                    cancellation_context=self._cancellation_context,
+                    timeout=self._timeout_seconds,
+                    cancel_action=_build_tool_cancel_action(tool),
+                    operation_name=f"tool:{tool_name}:inline_async",
+                )
         except asyncio.TimeoutError:
             elapsed_ms = int(max(0, (perf_counter() - started_at) * 1000))
-            logger.error(
-                "[工具调用失败] source=%s tool=%s tool_call_id=%s tool_args=%s status=timeout elapsed_ms=%d",
+            logger.info(
+                "[模型工具结果] source=%s tool=%s tool_call_id=%s status=timeout elapsed_ms=%d",
+                source,
+                tool_name,
+                tool_call_id,
+                elapsed_ms,
+            )
+            logger.debug(
+                "[工具调用失败细节] source=%s tool=%s tool_call_id=%s tool_args=%s status=timeout",
                 source,
                 tool_name,
                 tool_call_id,
                 tool_args_json,
-                elapsed_ms,
             )
             return _build_error_tool_message(
                 tool_name=tool_name,
@@ -196,10 +261,19 @@ class ToolExecutor:
                 source=source,
                 error_message=f"tool execution timed out after {self._timeout_seconds}s",
             )
+        except RunCancelledError:
+            raise
         except Exception as error:  # noqa: BLE001 - 这里需要把所有工具异常转成 ToolMessage
             elapsed_ms = int(max(0, (perf_counter() - started_at) * 1000))
+            logger.info(
+                "[模型工具结果] source=%s tool=%s tool_call_id=%s status=error elapsed_ms=%d",
+                source,
+                tool_name,
+                tool_call_id,
+                elapsed_ms,
+            )
             logger.exception(
-                "[工具调用失败] source=%s tool=%s tool_call_id=%s tool_args=%s status=exception elapsed_ms=%d",
+                "[工具调用失败细节] source=%s tool=%s tool_call_id=%s tool_args=%s status=exception elapsed_ms=%d",
                 source,
                 tool_name,
                 tool_call_id,
@@ -215,12 +289,18 @@ class ToolExecutor:
 
         elapsed_ms = int(max(0, (perf_counter() - started_at) * 1000))
         logger.info(
-            "[工具调用完成] source=%s tool=%s tool_call_id=%s tool_args=%s status=success elapsed_ms=%d",
+            "[模型工具结果] source=%s tool=%s tool_call_id=%s status=success elapsed_ms=%d",
+            source,
+            tool_name,
+            tool_call_id,
+            elapsed_ms,
+        )
+        logger.debug(
+            "[工具调用完成细节] source=%s tool=%s tool_call_id=%s tool_args=%s",
             source,
             tool_name,
             tool_call_id,
             tool_args_json,
-            elapsed_ms,
         )
         return ToolMessage(
             content=_serialize_tool_output(tool_result),

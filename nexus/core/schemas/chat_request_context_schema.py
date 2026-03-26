@@ -58,6 +58,14 @@ class ChatRequestContext(BaseModel):
     workflow_meta: Optional[WorkflowMeta] = Field(None, description="工作流元信息（名称、描述）")
     execution_hints: ExecutionHints = Field(default_factory=ExecutionHints, description="前端显式传入的工具选择信号")
     model_config_id: Optional[int] = Field(None, description="模型配置 ID")
-    mode: str = Field("chat", description="Agent 类型: 'chat'、'builder' 或 'debug'（SOLO Debugger）")
+    mode: str = Field("chat", description="Agent 类型: 'chat'、'builder' 或 'debugger'（SOLO Debugger）")
     session_id: Optional[str] = Field(None, description="会话 ID")
+    request_id: Optional[str] = Field(None, description="单次请求 ID")
     auth_token: Optional[str] = Field(None, description="用户认证 Token", exclude=True)
+
+
+class ChatCancelRequest(BaseModel):
+    """显式取消单次 chat 请求。"""
+
+    session_id: str = Field(..., description="会话 ID")
+    request_id: str = Field(..., description="单次请求 ID")

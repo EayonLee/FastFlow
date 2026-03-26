@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # - 127.0.0.1: 仅本机访问
     # 注意：本项目已移除 TrustedHostMiddleware，APP_HOST 不再用于 Host Header 白名单校验。
     APP_HOST: str = "0.0.0.0"
-    APP_VERSION: str = "1.1.0"
+    APP_VERSION: str = "1.1.1"
     BUILD_GIT_SHA: str = "unknown"
     BUILD_TIME: str = "unknown"
     
@@ -34,8 +34,8 @@ class Settings(BaseSettings):
     FASTFLOW_API_URL: str = "http://localhost:8080"
 
     # 历史会话配置
-    # 每个 session 最多保留的消息条数（短期记忆窗口）
-    SESSION_HISTORY_MAX_MESSAGES: int = 10
+    # 每个 session 最多保留的完整对话轮数（1 轮 = 1 次用户提问 + 1 次模型最终回答）
+    SESSION_HISTORY_MAX_TURNS: int = 10
     # 会话过期时间（秒）
     # <= 0 表示不过期，默认 1 小时
     SESSION_HISTORY_EXPIRE_SECONDS: int = 60 * 60
@@ -56,7 +56,7 @@ class Settings(BaseSettings):
 
     # 模型流式运行时配置
     # 模型流式调用：首个流式事件的等待超时（秒）
-    MODEL_STREAM_FIRST_EVENT_TIMEOUT_SECONDS: int = 180
+    MODEL_STREAM_FIRST_EVENT_TIMEOUT_SECONDS: int = 90
     # 模型流式调用：流开始后允许的空闲超时（秒）
     MODEL_STREAM_IDLE_TIMEOUT_SECONDS: int = 150
     # 模型流式调用：单轮总超时（秒）

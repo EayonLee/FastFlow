@@ -62,7 +62,7 @@ def _bind_model_with_tools(
         tool_choice,
     )
     if normalized_tool_choice != tool_choice:
-        logger.warning(
+        logger.info(
             "[模型参数兼容修正] adapter=%s tool_choice=%s->%s model_config_id=%s",
             runtime.adapter.provider_id,
             str(tool_choice),

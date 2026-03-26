@@ -70,7 +70,7 @@ graph TB
     A[Login] --> B[Dashboard]
     B --> C[Settings]
 ```
-- 如果输出了 `Mermaid` 图：可在回答的最后追加以下提示内容
+- 如果输出了 `Mermaid` 图，可在回答的最后追加以下提示内容，但如果发现之前已经提示过则本次可以不用提示
 > 💡 **提示**：可复制 `Mermaid` 代码到该站点编辑: https://mermaid.live
 </流程图（Mermaid）>
 

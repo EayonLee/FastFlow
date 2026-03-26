@@ -1260,6 +1260,20 @@
     box-shadow: 0 0 10px var(--accent-neon-dim);
 }
 
+.send-btn.is-stopping {
+    background: rgba(255, 75, 75, 0.14);
+    color: #ff5b5b;
+    border-color: rgba(255, 91, 91, 0.45);
+    box-shadow: 0 0 12px rgba(255, 91, 91, 0.18);
+}
+
+.send-btn.is-stopping:hover:not(:disabled) {
+    background: rgba(255, 75, 75, 0.2);
+    color: #ff6e6e;
+    border-color: rgba(255, 110, 110, 0.6);
+    box-shadow: 0 0 14px rgba(255, 91, 91, 0.28);
+}
+
 .send-btn:disabled {
     background: var(--bg-app);
     color: var(--text-dim);

@@ -13,6 +13,7 @@ import {
 const BACKGROUND_RETRY_DELAY_MS = 150
 const BACKGROUND_UNAVAILABLE_MESSAGE =
   '扩展后台 service worker 未就绪，请在 chrome://extensions 中重新加载 FastFlow 扩展后重试'
+const STREAM_DISCONNECTED_MESSAGE = '流式连接中断，请重试'
 
 /**
  * 检查当前运行环境是否具备扩展运行时。
@@ -132,7 +133,7 @@ export const backendClient = {
     return response.payload
   },
 
-  stream({ service, path, method = 'POST', headers = {}, body, onEvent, onComplete, onError, timeoutMs }) {
+  stream({ service, path, method = 'POST', headers = {}, body, onEvent, onComplete, onError }) {
     ensureChromeRuntime()
 
     // 流式请求需要长期保持通道，因此改用 Port，而不是一次性 sendMessage。
@@ -153,7 +154,7 @@ export const backendClient = {
         port?.postMessage({ type: FASTFLOW_STREAM_CANCEL })
       } catch {
         isClosed = true
-        onComplete?.({ cancelled: true })
+        onError?.(new Error('取消请求发送失败，请重试'))
         port?.disconnect()
       }
     }
@@ -182,7 +183,12 @@ export const backendClient = {
 
       if (message.type === FASTFLOW_STREAM_CANCELLED) {
         isClosed = true
-        onComplete?.({ cancelled: true })
+        onComplete?.({
+          cancelled: true,
+          cancelStatus: String(message?.payload?.status || '').trim() || 'unknown',
+          cancelAccepted: Boolean(message?.payload?.accepted),
+          cancelPayload: message?.payload || null,
+        })
         port.disconnect()
         return
       }
@@ -204,18 +210,9 @@ export const backendClient = {
     port.onDisconnect.addListener(() => {
       if (isClosed) return
       isClosed = true
-      if (isCancelling) {
-        onComplete?.({ cancelled: true })
-        return
-      }
-      if (chrome.runtime?.lastError) {
-        const runtimeError = buildRuntimeError('后台流式服务已断开')
-        onError?.(
-          isMissingReceiverError(runtimeError)
-            ? buildBackgroundUnavailableError(runtimeError.message)
-            : runtimeError
-        )
-      }
+      onError?.(
+        new Error(isCancelling ? '取消流程中断：后台连接已断开' : STREAM_DISCONNECTED_MESSAGE)
+      )
     })
 
     try {
@@ -226,8 +223,7 @@ export const backendClient = {
           path,
           method,
           headers,
-          body: serializeBody(body, headers),
-          timeoutMs
+          body: serializeBody(body, headers)
         }
       })
     } catch (error) {

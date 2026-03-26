@@ -100,7 +100,7 @@ source .venv/bin/activate
 | `FASTFLOW_API_URL` | API 模块地址，默认 `http://localhost:8080` |
 | `LOG_LEVEL` | 日志级别 |
 | `LOG_FORMAT` | 日志格式 |
-| `SESSION_HISTORY_MAX_MESSAGES` | 单个 session 的消息保留上限 |
+| `SESSION_HISTORY_MAX_TURNS` | 单个 session 的对话轮保留上限 |
 | `SESSION_HISTORY_EXPIRE_SECONDS` | 会话过期时间 |
 | `TOOL_MAX_CALLS_PER_QUESTION` | 单个问题允许的工具调用上限 |
 
@@ -198,7 +198,7 @@ Chrome Extension
   -> POST /fastflow/nexus/v1/agent/chat/completions
   -> ChatAgent / tools
   -> SSE events
-  -> [DONE]
+  -> run.completed / error
 ```
 
 几个关键点：
@@ -206,7 +206,7 @@ Chrome Extension
 - 这是流式服务，不是一次性 JSON 响应接口
 - `chat` 模式要求 `model_config_id`
 - `builder` / `debugger` 当前保留入口，但返回固定占位响应
-- 服务层在正常结束时会显式输出 `data: [DONE]`
+- 终态由业务事件驱动：`run.completed` 或 `error`
 
 ## 与其他模块的关系
 
@@ -265,7 +265,7 @@ docker build -f Dockerfile -t fastflow-nexus:latest .
 - `chat` 是当前主稳定入口
 - `builder` 与 `debugger` 目前保留但未开放完整能力
 - 扩展侧已经依赖这里输出的 SSE 事件模型，因此改事件类型要非常谨慎
-- 如果扩展界面卡在 loading，通常优先检查这里是否按预期输出了终态事件和 `[DONE]`
+- 如果扩展界面卡在 loading，通常优先检查这里是否按预期输出了终态事件（`run.completed` / `error`）
 
 ## 排查建议
 
@@ -275,7 +275,7 @@ docker build -f Dockerfile -t fastflow-nexus:latest .
 
 - Nexus 是否收到了请求
 - 是否输出了 `answer.done` / `run.completed`
-- 是否最终输出了 `data: [DONE]`
+- 是否输出了终态事件（`run.completed` 或 `error`）
 
 ### 2. 扩展收不到回答
 

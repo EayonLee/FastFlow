@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from contextlib import suppress
 from dataclasses import dataclass, field
-from typing import Any, Awaitable
+from typing import Any, Awaitable, Callable, Union
 
+from nexus.config.logger import get_logger
+
+
+logger = get_logger(__name__)
+CANCEL_ACTION_TIMEOUT_SECONDS = 1.0
+TASK_CANCEL_WAIT_TIMEOUT_SECONDS = 5.0
+CancelAction = Callable[[], Union[Awaitable[Any], Any]]
 
 class RunCancelledError(Exception):
     """表示当前 agent 运行已被主动取消。"""
@@ -51,6 +59,8 @@ async def await_with_cancellation(
     *,
     cancellation_context: RunCancellationContext | None = None,
     timeout: float | None = None,
+    cancel_action: CancelAction | None = None,
+    operation_name: str = "operation",
 ) -> Any:
     """
     等待一个异步操作，同时响应取消信号和超时。
@@ -62,6 +72,31 @@ async def await_with_cancellation(
 
     operation_task = asyncio.create_task(operation)
     cancel_wait_task = None
+
+    async def _run_cancel_action() -> None:
+        if cancel_action is None:
+            return
+        try:
+            maybe_awaitable = cancel_action()
+            if inspect.isawaitable(maybe_awaitable):
+                await asyncio.wait_for(maybe_awaitable, timeout=CANCEL_ACTION_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError:
+            logger.warning("[取消中断动作超时] operation=%s", operation_name)
+        except Exception:
+            logger.warning("[取消中断动作失败] operation=%s", operation_name, exc_info=True)
+
+    async def _cancel_operation_task() -> None:
+        if operation_task.done():
+            return
+        operation_task.cancel()
+        try:
+            await asyncio.wait_for(operation_task, timeout=TASK_CANCEL_WAIT_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError:
+            logger.error("[运行中操作取消超时] operation=%s", operation_name)
+        except asyncio.CancelledError:
+            logger.info("[运行中操作已停止] operation=%s", operation_name)
+        except Exception:
+            logger.warning("[运行中操作取消后异常结束] operation=%s", operation_name, exc_info=True)
 
     try:
         wait_set = {operation_task}
@@ -79,14 +114,13 @@ async def await_with_cancellation(
             return await operation_task
 
         if cancel_wait_task is not None and cancel_wait_task in done:
-            operation_task.cancel()
-            with suppress(asyncio.CancelledError, Exception):
-                await operation_task
+            logger.info("[取消信号命中运行中操作] operation=%s", operation_name)
+            await _run_cancel_action()
+            await _cancel_operation_task()
             cancellation_context.raise_if_cancelled()
 
-        operation_task.cancel()
-        with suppress(asyncio.CancelledError, Exception):
-            await operation_task
+        await _run_cancel_action()
+        await _cancel_operation_task()
         raise asyncio.TimeoutError
     finally:
         if cancel_wait_task is not None:
