@@ -1,5 +1,6 @@
 import asyncio
 import importlib
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,9 +13,14 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from nexus.common.exceptions import BusinessError
-from nexus.core.agent_runtime.cancellation import RunCancellationContext, RunCancelledError
+from nexus.core.agent_runtime import active_run_registry
+from nexus.core.agent_runtime.cancellation import (
+    RunCancellationContext,
+    RunCancelledError,
+    await_with_cancellation,
+)
 from nexus.core.agent_runtime.contracts import AgentRuntimeConfig
-from nexus.core.schemas import ChatRequestContext, ExecutionHints
+from nexus.core.schemas import ChatCancelRequest, ChatRequestContext, ExecutionHints
 from nexus.core.tools.runtime.contracts import CHAT_AGENT_TOOL_PROFILE
 
 
@@ -31,6 +37,10 @@ def _load_runtime_modules():
     agent_service_module = _reload_module("nexus.services.agent_service")
     agent_api_module = _reload_module("nexus.api.agent")
     return turn_stream_module, run_loop_module, chat_module, policy_module, agent_service_module, agent_api_module
+
+
+def _load_stream_session_module():
+    return _reload_module("nexus.api.streaming.session")
 
 
 class FakeLLM:
@@ -66,6 +76,14 @@ class DummyHistory:
         self.messages = []
         self.user_messages = []
         self.ai_messages = []
+
+    def add_messages(self, messages):
+        for message in messages:
+            self.messages.append(message)
+            if isinstance(message, HumanMessage):
+                self.user_messages.append(message.content)
+            elif isinstance(message, AIMessage):
+                self.ai_messages.append(message.content)
 
     def add_user_message(self, message):
         self.user_messages.append(message)
@@ -202,7 +220,7 @@ def test_stream_model_turn_times_out_on_first_token(monkeypatch):
         )
         raise AssertionError("expected BusinessError")
     except BusinessError as error:
-        assert str(error) == "模型流式输出超时：首个流式事件返回过慢"
+        assert "模型输出超时：首Token返回过慢" in str(error)
 
 
 def test_stream_model_turn_splits_inline_thinking_tags_before_emitting_answer(monkeypatch):
@@ -512,11 +530,11 @@ def test_agent_service_emits_error_and_done_for_business_error():
     service = agent_service_module.AgentService(chat_agent=ErrorChatAgent())
     context = ChatRequestContext(user_prompt="你好", model_config_id=10003, session_id="s1")
 
-    chunks = asyncio.run(_collect(service.handle_chat_request(context)))
+    events = asyncio.run(_collect(service.handle_chat_request(context)))
 
-    assert '"type": "error"' in chunks[-2]
-    assert '"模型未返回有效回答"' in chunks[-2]
-    assert chunks[-1] == agent_service_module.SSE_DONE
+    assert len(events) == 1
+    assert events[0]["type"] == "error"
+    assert "模型未返回有效回答" in events[0]["message"]
 
 
 def test_agent_service_emits_only_done_for_cancelled_run():
@@ -524,9 +542,9 @@ def test_agent_service_emits_only_done_for_cancelled_run():
     service = agent_service_module.AgentService(chat_agent=CancelledChatAgent())
     context = ChatRequestContext(user_prompt="你好", model_config_id=10003, session_id="s1")
 
-    chunks = asyncio.run(_collect(service.handle_chat_request(context)))
+    events = asyncio.run(_collect(service.handle_chat_request(context)))
 
-    assert chunks == [agent_service_module.SSE_DONE]
+    assert events == []
 
 
 def test_agent_service_appends_done_after_run_completed():
@@ -541,14 +559,13 @@ def test_agent_service_appends_done_after_run_completed():
     )
     context = ChatRequestContext(user_prompt="你好", model_config_id=10003, session_id="s1")
 
-    chunks = asyncio.run(_collect(service.handle_chat_request(context)))
+    events = asyncio.run(_collect(service.handle_chat_request(context)))
 
-    assert '"type": "run.completed"' in chunks[-2]
-    assert chunks[-1] == agent_service_module.SSE_DONE
+    assert [event["type"] for event in events] == ["run.started", "run.completed"]
 
 
 def test_safe_stream_completes_cleanly_with_disconnect_monitor():
-    _turn_stream_module, _run_loop_module, _chat_module, _policy_module, _agent_service_module, agent_api_module = _load_runtime_modules()
+    stream_session_module = _load_stream_session_module()
 
     class FakeRequest:
         async def is_disconnected(self):
@@ -556,12 +573,11 @@ def test_safe_stream_completes_cleanly_with_disconnect_monitor():
             return False
 
     async def simple_stream():
-        yield 'data: {"type":"run.completed"}\n\n'
-        yield 'data: [DONE]\n\n'
+        yield {"type": "run.completed"}
 
     chunks = asyncio.run(
         _collect(
-            agent_api_module._safe_stream(
+            stream_session_module.safe_stream(
                 simple_stream(),
                 "s1",
                 request=FakeRequest(),
@@ -570,10 +586,106 @@ def test_safe_stream_completes_cleanly_with_disconnect_monitor():
         )
     )
 
-    assert chunks == [
-        'data: {"type":"run.completed"}\n\n',
-        'data: [DONE]\n\n',
-    ]
+    assert len(chunks) == 1
+    assert json.loads(chunks[0]["data"])["type"] == "run.completed"
+
+
+def test_safe_stream_fails_when_terminal_event_missing(monkeypatch):
+    stream_session_module = _load_stream_session_module()
+    captured_status = {}
+
+    async def fake_mark_finished(*, session_id, request_id, status):
+        captured_status["session_id"] = session_id
+        captured_status["request_id"] = request_id
+        captured_status["status"] = status
+
+    monkeypatch.setattr(stream_session_module.active_run_registry, "mark_finished", fake_mark_finished)
+
+    async def non_terminal_stream():
+        yield {"type": "answer.delta", "content": "partial"}
+
+    chunks = asyncio.run(
+        _collect(
+            stream_session_module.safe_stream(
+                non_terminal_stream(),
+                "s1",
+                request_id="r_missing_terminal",
+            )
+        )
+    )
+
+    payloads = [json.loads(chunk["data"]) for chunk in chunks]
+    assert [payload["type"] for payload in payloads] == ["answer.delta", "error"]
+    assert "终态事件" in payloads[-1]["message"]
+    assert captured_status == {"session_id": "s1", "request_id": "r_missing_terminal", "status": "failed"}
+
+
+def test_safe_stream_keeps_completed_status_when_exception_after_terminal(monkeypatch):
+    stream_session_module = _load_stream_session_module()
+    captured_status = {}
+
+    async def fake_mark_finished(*, session_id, request_id, status):
+        captured_status["session_id"] = session_id
+        captured_status["request_id"] = request_id
+        captured_status["status"] = status
+
+    monkeypatch.setattr(stream_session_module.active_run_registry, "mark_finished", fake_mark_finished)
+
+    async def terminal_then_error_stream():
+        yield {"type": "run.completed"}
+        raise RuntimeError("write failed after terminal")
+
+    chunks = asyncio.run(
+        _collect(
+            stream_session_module.safe_stream(
+                terminal_then_error_stream(),
+                "s1",
+                request_id="r_terminal_then_error",
+            )
+        )
+    )
+
+    payloads = [json.loads(chunk["data"]) for chunk in chunks]
+    assert [payload["type"] for payload in payloads] == ["run.completed"]
+    assert captured_status == {"session_id": "s1", "request_id": "r_terminal_then_error", "status": "completed"}
+
+
+def test_safe_stream_marks_cancelled_status_for_cancelled_chat_run(monkeypatch):
+    stream_session_module = _load_stream_session_module()
+    _turn_stream_module, _run_loop_module, _chat_module, _policy_module, agent_service_module, _agent_api_module = _load_runtime_modules()
+    service = agent_service_module.AgentService(chat_agent=CancelledChatAgent())
+    context = ChatRequestContext(
+        user_prompt="你好",
+        model_config_id=10003,
+        session_id="s1",
+        request_id="r_stream_cancel",
+    )
+    cancellation_context = RunCancellationContext()
+    captured_status = {}
+
+    async def fake_mark_finished(*, session_id, request_id, status):
+        captured_status["session_id"] = session_id
+        captured_status["request_id"] = request_id
+        captured_status["status"] = status
+
+    monkeypatch.setattr(stream_session_module.active_run_registry, "mark_finished", fake_mark_finished)
+
+    chunks = asyncio.run(
+        _collect(
+            stream_session_module.safe_stream(
+                service.handle_chat_request_with_cancellation(
+                    context,
+                    cancellation_context=cancellation_context,
+                ),
+                context.session_id,
+                request_id=context.request_id,
+                cancellation_context=cancellation_context,
+            )
+        )
+    )
+
+    assert chunks == []
+    assert captured_status == {"session_id": "s1", "request_id": "r_stream_cancel", "status": "cancelled"}
 
 
 def test_disabled_agent_request_emits_error_without_run_completed():
@@ -581,9 +693,174 @@ def test_disabled_agent_request_emits_error_without_run_completed():
     service = agent_service_module.AgentService(chat_agent=DummyChatAgent([]))
     context = ChatRequestContext(user_prompt="你好", model_config_id=10003, session_id="s1", mode="builder")
 
-    chunks = asyncio.run(_collect(service.handle_builder_request(context)))
+    events = asyncio.run(_collect(service.handle_builder_request(context)))
 
-    assert '"type": "run.started"' in chunks[0]
-    assert '"type": "error"' in chunks[1]
-    assert all('"type": "run.completed"' not in chunk for chunk in chunks)
-    assert chunks[-1] == agent_service_module.SSE_DONE
+    assert [event["type"] for event in events] == ["run.started", "error"]
+
+
+def test_active_run_registry_can_cancel_registered_request():
+    cancellation_context = RunCancellationContext()
+
+    async def _run():
+        await active_run_registry.register(
+            session_id="s1",
+            request_id="r_registry_cancel",
+            cancellation_context=cancellation_context,
+        )
+        cancel_result = await active_run_registry.cancel(
+            session_id="s1",
+            request_id="r_registry_cancel",
+            reason="用户主动停止生成",
+        )
+        await active_run_registry.mark_finished(
+            session_id="s1",
+            request_id="r_registry_cancel",
+            status="cancelled",
+        )
+        return cancel_result
+
+    cancelled = asyncio.run(_run())
+
+    assert cancelled.status == "accepted"
+    assert cancelled.accepted is True
+    assert cancellation_context.is_cancelled is True
+    assert cancellation_context.reason == "用户主动停止生成"
+
+
+def test_active_run_registry_reuse_request_id_after_finish_is_allowed():
+    first_context = RunCancellationContext()
+    second_context = RunCancellationContext()
+
+    async def _run():
+        request_id = "r_reuse"
+        await active_run_registry.register(
+            session_id="s1",
+            request_id=request_id,
+            cancellation_context=first_context,
+        )
+        await active_run_registry.mark_finished(
+            session_id="s1",
+            request_id=request_id,
+            status="completed",
+        )
+        await active_run_registry.register(
+            session_id="s1",
+            request_id=request_id,
+            cancellation_context=second_context,
+        )
+        return await active_run_registry.cancel(
+            session_id="s1",
+            request_id=request_id,
+            reason="用户主动停止生成",
+        )
+
+    cancelled = asyncio.run(_run())
+
+    assert cancelled.status == "accepted"
+    assert cancelled.accepted is True
+    assert second_context.is_cancelled is True
+
+
+def test_active_run_registry_same_request_id_isolated_by_session():
+    context_s1 = RunCancellationContext()
+    context_s2 = RunCancellationContext()
+
+    async def _run():
+        request_id = "r_same"
+        await active_run_registry.register(
+            session_id="s1",
+            request_id=request_id,
+            cancellation_context=context_s1,
+        )
+        await active_run_registry.mark_finished(
+            session_id="s1",
+            request_id=request_id,
+            status="completed",
+        )
+        await active_run_registry.register(
+            session_id="s2",
+            request_id=request_id,
+            cancellation_context=context_s2,
+        )
+        return await active_run_registry.cancel(
+            session_id="s2",
+            request_id=request_id,
+            reason="用户主动停止生成",
+        )
+
+    cancelled = asyncio.run(_run())
+
+    assert cancelled.status == "accepted"
+    assert cancelled.accepted is True
+    assert context_s2.is_cancelled is True
+
+
+def test_cancel_chat_completion_endpoint_marks_run_cancelled(monkeypatch):
+    _turn_stream_module, _run_loop_module, _chat_module, _policy_module, _agent_service_module, agent_api_module = _load_runtime_modules()
+    cancellation_context = RunCancellationContext()
+    monkeypatch.setattr(agent_api_module, "check_login", lambda _token: True)
+
+    class FakeRequest:
+        headers = {"Authorization": "Bearer token"}
+
+    async def _run():
+        request_id = "r_cancel_endpoint"
+        await agent_api_module.active_run_registry.register(
+            session_id="s1",
+            request_id=request_id,
+            cancellation_context=cancellation_context,
+        )
+        cancel_task = asyncio.create_task(
+            agent_api_module.cancel_chat_completion(
+                ChatCancelRequest(session_id="s1", request_id=request_id),
+                FakeRequest(),
+            )
+        )
+        while not cancellation_context.is_cancelled and not cancel_task.done():
+            await asyncio.sleep(0)
+        if cancellation_context.is_cancelled:
+            await agent_api_module.active_run_registry.mark_finished(
+                session_id="s1",
+                request_id=request_id,
+                status="cancelled",
+            )
+        return await cancel_task
+
+    payload = asyncio.run(_run())
+
+    assert payload["code"] == 200
+    assert payload["data"]["accepted"] is True
+    assert payload["data"]["cancelled"] is True
+    assert payload["data"]["status"] == "accepted"
+    assert cancellation_context.is_cancelled is True
+
+
+def test_await_with_cancellation_runs_cancel_action_and_raises_cancelled():
+    cancellation_context = RunCancellationContext()
+    cancel_action_called = []
+
+    async def never_finishes():
+        await asyncio.Future()
+
+    async def cancel_action():
+        cancel_action_called.append(True)
+
+    async def _run():
+        task = asyncio.create_task(
+            await_with_cancellation(
+                never_finishes(),
+                cancellation_context=cancellation_context,
+                cancel_action=cancel_action,
+                operation_name="unit-test-operation",
+            )
+        )
+        await asyncio.sleep(0)
+        cancellation_context.cancel("用户主动停止生成")
+        await task
+
+    try:
+        asyncio.run(_run())
+        raise AssertionError("expected RunCancelledError")
+    except RunCancelledError as error:
+        assert str(error) == "用户主动停止生成"
+    assert cancel_action_called == [True]

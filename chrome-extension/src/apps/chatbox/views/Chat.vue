@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { ref, shallowRef, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { Bot, Bug, MessageSquare, Send, Copy, Check, Square } from 'lucide-vue-next'
 import { useDraggable, useStorage, useWindowSize } from '@vueuse/core'
 import FlowSelect from '@/shared/components/FlowSelect.vue'
@@ -70,7 +70,7 @@ const selectedModel = ref('')
 const agents = [
   { id: 'chat', label: 'Deep Chat', icon: MessageSquare, color: '#00ff41' },
   { id: 'builder', label: 'SOLO Builder', icon: Bot, color: '#c084fc' },
-  { id: 'debug', label: 'SOLO Debugger', icon: Bug, color: '#f59e0b' }
+  { id: 'debugger', label: 'SOLO Debugger', icon: Bug, color: '#f59e0b' }
 ]
 
 // 可选模型列表（由后端配置拉取）
@@ -88,10 +88,18 @@ const messages = ref([
 ])
 // 复制反馈逻辑（控制复制按钮图标切换）
 const { copiedMap, copyText } = useCopyFeedback()
-// 是否处于发送中（控制按钮禁用与加载动画）
-const isLoading = ref(false)
-const activeStreamSession = ref(null)
-const activeLoadingMessageId = ref('')
+// 当前活跃请求。
+//
+// 这里统一收口一次聊天请求的全局状态，避免 `isLoading`、`session`、`messageId`
+// 三份状态在错误或取消时发生漂移，导致按钮状态和消息状态不一致。
+// 活跃请求是一个生命周期句柄，不需要深层响应式。
+//
+// 这里必须保持对象引用稳定：
+// - 发送链路会用“当前 ref 里挂着的请求对象”与“本次创建的请求对象”做同一性判断
+// - 如果用普通 `ref`，Vue 会把对象包装成 Proxy，导致引用比较失真
+// - 结果就是新会话刚创建就被误判成“已过期请求”，直接走本地 cancelled
+const activeRequest = shallowRef(null)
+const isLoading = computed(() => !!activeRequest.value)
 // 消息容器 DOM 引用，用于滚动到末尾
 const messagesContainer = ref(null)
 // 是否允许消息区域自动跟随最新内容滚动
@@ -445,20 +453,54 @@ function setMessageError(id, message) {
   scrollToBottom()
 }
 
-function setMessageCancelled(id) {
+function normalizeCancelStatus(cancelInfo) {
+  const status = String(cancelInfo?.cancelStatus || cancelInfo?.status || '').trim()
+  return status || 'unknown'
+}
+
+function isCancelAccepted(cancelInfo) {
+  if (typeof cancelInfo?.cancelAccepted === 'boolean') return cancelInfo.cancelAccepted
+  if (typeof cancelInfo?.accepted === 'boolean') return cancelInfo.accepted
+  return true
+}
+
+function buildCancelDisplayMessage(cancelInfo) {
+  const status = normalizeCancelStatus(cancelInfo)
+  const accepted = isCancelAccepted(cancelInfo)
+
+  if (accepted) {
+    return status === 'accepted' ? '已停止生成' : `已停止生成（status=${status}）`
+  }
+  if (status === 'already_finished') {
+    return '取消请求未执行：会话已结束（status=already_finished）'
+  }
+  if (status === 'not_found') {
+    return '取消请求未命中活跃会话（status=not_found）'
+  }
+  if (status === 'cancel_request_failed') {
+    return '取消请求失败（status=cancel_request_failed）'
+  }
+  if (status === 'not_cancellable') {
+    return '取消请求不可用（status=not_cancellable）'
+  }
+  return `取消请求未生效（status=${status}）`
+}
+
+function setMessageCancelled(id, cancelInfo = null) {
   const target = findMessage(id)
   if (!target || target.runtimeStatus === 'cancelled') return
+  const detail = buildCancelDisplayMessage(cancelInfo)
 
   appendExecutionEvent(id, {
     type: 'run.cancelled',
-    message: '已停止生成'
+    message: detail
   })
   updateMessage(id, (message) => {
     message.isLoading = false
     message.runtimeCompleted = true
     message.runtimeStatus = 'cancelled'
     if (!String(message.content || '').trim()) {
-      message.content = '已停止生成'
+      message.content = detail
     }
   })
   scrollToBottom()
@@ -540,9 +582,8 @@ onUnmounted(() => {
   }
 
   closeMermaidViewer()
-  activeStreamSession.value?.cancel?.()
-  activeStreamSession.value = null
-  activeLoadingMessageId.value = ''
+  activeRequest.value?.session?.cancel?.()
+  activeRequest.value = null
 })
 
 watch(isAuthed, async (val) => {
@@ -766,20 +807,34 @@ const canSubmitMessage = computed(() => {
   return buildRequestPayloadFromSegments(snapshot.displaySegments, snapshot.prompt).hasContent
 })
 
-function clearActiveRequest(session = null) {
-  if (session && activeStreamSession.value !== session) return
-  activeStreamSession.value = null
-  activeLoadingMessageId.value = ''
-  isLoading.value = false
+function createActiveRequestState(loadingMessageId) {
+  return {
+    loadingMessageId,
+    session: null,
+    cancelRequested: false,
+  }
+}
+
+function clearActiveRequest(request = null) {
+  if (request && activeRequest.value !== request) return
+  activeRequest.value = null
+}
+
+function attachSessionToRequest(request, session) {
+  request.session = session
+  if (activeRequest.value !== request) {
+    session.cancel?.()
+    return false
+  }
+  return true
 }
 
 function stopActiveGeneration() {
-  const session = activeStreamSession.value
-  const loadingMessageId = activeLoadingMessageId.value
-  if (!session || !loadingMessageId) return
-  session.cancel()
-  clearActiveRequest(session)
-  setMessageCancelled(loadingMessageId)
+  const request = activeRequest.value
+  if (!request?.loadingMessageId) return
+
+  request.cancelRequested = true
+  request.session?.cancel?.()
 }
 
 // 发送消息处理逻辑
@@ -803,11 +858,11 @@ async function handleGenerate() {
   addMessage(prompt, 'user', { displaySegments })
   protocolComposerRef.value?.clear?.()
   composerPrompt.value = ''
-  isLoading.value = true
 
   // 4) 显示加载中消息（用于流式更新）
   const loadingMsgId = generateUuid32() // 使用 32 位 UUID，避免冲突
-  activeLoadingMessageId.value = loadingMsgId
+  const requestState = createActiveRequestState(loadingMsgId)
+  activeRequest.value = requestState
   messages.value.push(
     createMessage('', 'ai', {
       id: loadingMsgId,
@@ -835,7 +890,6 @@ async function handleGenerate() {
     })
     markRuntimeCompleted(loadingMsgId)
     renderMermaidOnceAfterReply()
-    isLoading.value = false
   }
 
   // 5) 仅 Chat 模式需要导出当前工作流配置与元信息。
@@ -853,7 +907,7 @@ async function handleGenerate() {
     } catch (e) {
       setMessageError(loadingMsgId, `Export current workflow graph failed：${e.message}`)
       // 终止本次发送
-      clearActiveRequest()
+      clearActiveRequest(requestState)
       return
     }
   }
@@ -867,6 +921,7 @@ async function handleGenerate() {
         mode: selectedAgent.value,
         modelConfigId: isChatAgent ? selectedModel.value : null,
         sessionId: sessionId.value,
+        requestId: loadingMsgId,
         workflowGraph,
         workflowMeta
       },
@@ -898,7 +953,7 @@ async function handleGenerate() {
         },
         onComplete(graphData) {
           if (isChatAgent) {
-            clearActiveRequest(session)
+            clearActiveRequest(requestState)
             return
           }
 
@@ -919,14 +974,14 @@ async function handleGenerate() {
                   scrollToBottom()
                 }
                 renderMermaidNow()
-                clearActiveRequest(session)
+                clearActiveRequest(requestState)
               },
               () => {
                 if (targetMsg) {
                   targetMsg.content = '新画布渲染失败：未能将编排应用到页面，请检查页面是否处于可编辑状态。'
                   scrollToBottom()
                 }
-                clearActiveRequest(session)
+                clearActiveRequest(requestState)
               }
             )
           } catch (error) {
@@ -934,23 +989,26 @@ async function handleGenerate() {
               targetMsg.isLoading = false
               targetMsg.content = `Formatting or Rendering Error: \n${error.message}`
             }
-            clearActiveRequest(session)
+            clearActiveRequest(requestState)
           }
         },
-        onCancelled() {
-          clearActiveRequest(session)
+        onCancelled(cancelInfo) {
+          setMessageCancelled(loadingMsgId, cancelInfo)
+          clearActiveRequest(requestState)
         },
         onError(error) {
-          setMessageError(loadingMsgId, `${error.message}`)
-          clearActiveRequest(session)
+          setMessageError(loadingMsgId, String(error?.message || '').trim() || '请求失败，请重试')
+          clearActiveRequest(requestState)
         }
       }
     )
-    activeStreamSession.value = session
+    if (!attachSessionToRequest(requestState, session)) {
+      return
+    }
     session.result.catch(() => {})
   } catch (error) {
-    setMessageError(loadingMsgId, `${error.message}`)
-    clearActiveRequest()
+    setMessageError(loadingMsgId, String(error?.message || '').trim() || '请求失败，请重试')
+    clearActiveRequest(requestState)
     return
   }
 }
@@ -1121,8 +1179,8 @@ async function handleGenerate() {
                 <!-- 发送按钮 -->
                 <button 
                   id="fastflow-send-btn"
-                  class="send-btn" 
-                  :disabled="isLoading ? !activeStreamSession : !canSubmitMessage"
+                  :class="['send-btn', { 'is-stopping': isLoading }]"
+                  :disabled="isLoading ? false : !canSubmitMessage"
                   :title="isLoading ? '停止生成' : '发送消息'"
                   @click="isLoading ? stopActiveGeneration() : handleGenerate()"
                 >

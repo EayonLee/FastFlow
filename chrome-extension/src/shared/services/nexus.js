@@ -9,6 +9,7 @@ function buildAgentRequestBody(params) {
     user_prompt: params.prompt,
     execution_hints: params.executionHints ?? { selected_nodes: [], selected_skills: [] },
     session_id: params.sessionId,
+    request_id: params.requestId,
     model_config_id: params.modelConfigId,
     workflow_graph: params.workflowGraph,
     workflow_meta: params.workflowMeta ?? null
@@ -44,8 +45,14 @@ function generateWorkflow(params, handlers = {}) {
         startCancelled = true
         state = 'cancelled'
         settled = true
-        handlers.onCancelled?.()
-        resolveResult({ cancelled: true, finalGraph: null })
+        const cancelPayload = {
+          cancelled: true,
+          cancelStatus: 'cancelled_before_start',
+          cancelAccepted: false,
+          finalGraph: null,
+        }
+        handlers.onCancelled?.(cancelPayload)
+        resolveResult(cancelPayload)
         return
       }
       state = 'cancelling'

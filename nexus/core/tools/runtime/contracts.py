@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Literal
+from typing import Any, Callable, Dict, Literal, Optional
 
 TOOL_CALL_SOURCE_HINT = "hint"
 TOOL_CALL_SOURCE_MODEL = "model"
 ToolCallSource = Literal["hint", "model"]
 ToolCapabilityGroup = Literal["workflow", "skill", "time"]
+ToolExecutionMode = Literal["inline_async", "isolated_process"]
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,7 @@ class ToolCatalog:
 
     tools: list[Any]
     registry_by_name: Dict[str, Any]
+    execution_specs_by_name: Dict[str, "ToolExecutionSpec"] = field(default_factory=dict)
     workflow_tool_count: int = 0
     skill_tool_count: int = 0
     time_tool_count: int = 0
@@ -46,6 +48,25 @@ class ToolCatalog:
     @property
     def total_count(self) -> int:
         return len(self.tools)
+
+
+@dataclass(frozen=True)
+class ToolExecutionSpec:
+    """
+    单个工具的执行规格。
+
+    `inline_async`:
+    - 在当前进程内执行
+    - 适用于轻量、本地、可取消的工具
+
+    `isolated_process`:
+    - 在独立子进程执行
+    - 适用于需要强停止保证的阻塞型工具
+    """
+
+    tool: Any
+    mode: ToolExecutionMode = "inline_async"
+    process_target: Optional[Callable[[dict[str, Any]], Any]] = None
 
 
 CHAT_AGENT_TOOL_PROFILE = AgentToolProfile(

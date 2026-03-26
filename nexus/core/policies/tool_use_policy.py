@@ -243,7 +243,7 @@ def resolve_tool_choice(
     tool_message_count = get_tool_message_count(messages)
     if tool_message_count >= MAX_TOOL_CALLS_PER_QUESTION:
         logger.info(
-            "[工具选择策略] 动作=停止调工具 原因=触发全局安全上限(%d/%d)",
+            "[工具选择策略] action=停止调工具 resaon=触发全局安全上限(%d/%d)",
             tool_message_count,
             MAX_TOOL_CALLS_PER_QUESTION,
         )
@@ -252,7 +252,7 @@ def resolve_tool_choice(
     tool_loop_check = detect_tool_loop(messages)
     if tool_loop_check.level in {"critical", "global"}:
         logger.info(
-            "[工具选择策略] 动作=停止调工具 原因=%s 等级=%s 次数=%d",
+            "[工具选择策略] action=停止调工具 reason=%s level=%s count=%d",
             tool_loop_check.reason,
             tool_loop_check.level,
             tool_loop_check.repeat_count,
@@ -260,15 +260,15 @@ def resolve_tool_choice(
         return "none"
     if tool_loop_check.level == "warning":
         logger.warning(
-            "[工具选择策略] 动作=记录循环告警 原因=%s 等级=%s 次数=%d",
+            "[工具选择策略] action=记录循环告警 reason=%s level=%s count=%d",
             tool_loop_check.reason,
             tool_loop_check.level,
             tool_loop_check.repeat_count,
         )
 
     if not candidate_tools:
-        logger.info("[工具选择策略] 动作=停止调工具 原因=当前 agent 没有可用工具")
+        logger.info("[工具选择策略] action=停止调工具 reason=当前 agent 没有可用工具")
         return "none"
 
-    logger.info("[工具选择策略] 动作=开放全部已启用工具 结果=auto")
+    logger.info("[工具选择策略] action=开放全部已启用工具 result=auto")
     return "auto"

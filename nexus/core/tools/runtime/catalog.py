@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from nexus.core.schemas import ChatRequestContext
-from nexus.core.tools.runtime.contracts import AgentToolProfile, ToolCatalog
+from nexus.core.tools.runtime.contracts import AgentToolProfile, ToolCatalog, ToolExecutionSpec
 from nexus.core.tools.system.skill_tools import build_skill_tools
 from nexus.core.tools.system.time_tools import build_time_tools
 from nexus.core.tools.workflow import build_workflow_tools
@@ -17,6 +17,16 @@ def _register_tools(registry_by_name: dict[str, Any], tools: list[Any]) -> None:
         if tool_name in registry_by_name:
             raise ValueError(f"duplicate tool registered: {tool_name}")
         registry_by_name[tool_name] = tool
+
+
+def _build_default_execution_specs(tools: list[Any]) -> dict[str, ToolExecutionSpec]:
+    execution_specs: dict[str, ToolExecutionSpec] = {}
+    for tool in tools:
+        tool_name = str(getattr(tool, "name", "") or "").strip()
+        if not tool_name:
+            continue
+        execution_specs[tool_name] = ToolExecutionSpec(tool=tool)
+    return execution_specs
 
 
 def build_tool_catalog(context: ChatRequestContext, profile: AgentToolProfile) -> ToolCatalog:
@@ -38,10 +48,12 @@ def build_tool_catalog(context: ChatRequestContext, profile: AgentToolProfile) -
     tools = [*workflow_tools, *skill_tools, *time_tools]
     registry_by_name: dict[str, Any] = {}
     _register_tools(registry_by_name, tools)
+    execution_specs_by_name = _build_default_execution_specs(tools)
 
     return ToolCatalog(
         tools=tools,
         registry_by_name=registry_by_name,
+        execution_specs_by_name=execution_specs_by_name,
         workflow_tools=workflow_tools,
         skill_tools=skill_tools,
         time_tools=time_tools,

@@ -5,6 +5,7 @@ langchain-community
 # 服务端框架
 fastapi
 uvicorn
+sse-starlette
 
 # 模型厂商接入支持
 litellm>=1.63.0

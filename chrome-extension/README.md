@@ -49,7 +49,7 @@
 
 1. 打开 [FastFlow Releases](https://github.com/EayonLee/FastFlow/releases)
 2. 下载最新版本中的扩展发行包，文件名类似 `fastflow-<version>-chrome.zip`
-3. 将 zip 解压到本地目录，例如 `~/Downloads/fastflow-1.1.0-chrome/`
+3. 将 zip 解压到本地目录，例如 `~/Downloads/fastflow-1.1.1-chrome/`
 4. 打开 Chrome，访问 `chrome://extensions`
 5. 打开右上角“开发者模式”
 6. 点击“加载已解压的扩展程序”
@@ -214,14 +214,14 @@ npm run build:dev
 字段：
 
 ```json
-"version": "1.1.0"
+"version": "1.1.1"
 ```
 
 规则：
 
 - 这是唯一版本来源
-- `build:prod` 会显示为 `1.1.0`
-- `build:dev` 会显示为 `1.1.0-dev`
+- `build:prod` 会显示为 `1.1.1`
+- `build:dev` 会显示为 `1.1.1-dev`
 
 ### 固定扩展 ID
 

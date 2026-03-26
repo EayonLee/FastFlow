@@ -175,7 +175,7 @@ def build_runtime_state(runtime_config: AgentRuntimeConfig) -> AgentRuntimeState
         raise BusinessError("缺少模型配置 ID (model_config_id)")
 
     tool_catalog = build_tool_catalog(runtime_config.context, runtime_config.tool_profile)
-    logger.info(
+    logger.debug(
         "[工具目录初始化] agent=%s total=%d workflow=%d skill=%d time=%d",
         runtime_config.agent_name,
         tool_catalog.total_count,
@@ -338,16 +338,15 @@ async def run_agent(runtime_config: AgentRuntimeConfig) -> AsyncGenerator[dict[s
         break
 
     _raise_if_cancelled(cancellation_context)
-    if str(runtime_config.context.user_prompt or "").strip():
-        runtime_state.history.add_user_message(runtime_config.context.user_prompt)
-    if final_answer:
-        runtime_state.history.add_ai_message(final_answer)
+    user_prompt = str(runtime_config.context.user_prompt or "").strip()
+    if user_prompt and final_answer:
+        runtime_state.history.add_messages(
+            [
+                HumanMessage(content=user_prompt),
+                AIMessage(content=final_answer),
+            ]
+        )
 
     yield phase_tracker.build_completed_event()
     yield build_answer_done_event(final_answer)
     yield build_run_completed_event(final_answer_len=len(final_answer))
-    logger.info(
-        "[SSE 会话完成] agent=%s final_answer_len=%d",
-        runtime_config.agent_name,
-        len(final_answer),
-    )

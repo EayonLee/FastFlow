@@ -10,7 +10,7 @@ function createProtocolError(message) {
  * 创建一个可取消的 agent 流式会话。
  *
  * 约定：
- * - `run.completed` 表示业务完成
+ * - 业务终态事件：`run.completed` / `error`
  * - transport close 只表示连接关闭
  * - 用户主动停止不会被当成错误
  */
@@ -20,7 +20,6 @@ export function startAgentStream(request, handlers = {}) {
   let seenErrorEvent = false
   let settled = false
   let state = 'running'
-  let ignoreFutureEvents = false
   const session = {
     result: null,
     cancel() {},
@@ -46,7 +45,7 @@ export function startAgentStream(request, handlers = {}) {
     const streamHandle = backendClient.stream({
       ...request,
       onEvent(event) {
-        if (settled || ignoreFutureEvents) return
+        if (settled) return
         if (!event || !event.type) return
 
         if (event.type === 'graph') {
@@ -71,22 +70,15 @@ export function startAgentStream(request, handlers = {}) {
       onComplete(payload) {
         if (settled) return
 
-        if (state === 'cancelling') {
-          state = 'cancelled'
-          handlers.onCancelled?.()
-          settleSuccess({ cancelled: true })
-          return
-        }
-
         if (payload?.cancelled) {
           state = 'cancelled'
-          handlers.onCancelled?.()
-          settleSuccess({ cancelled: true })
+          handlers.onCancelled?.(payload)
+          settleSuccess(payload)
           return
         }
 
         if (!seenRunCompleted && !seenErrorEvent) {
-          const error = createProtocolError('流式连接已关闭，但后端未发送 run.completed')
+          const error = createProtocolError('流式连接已关闭，但后端未发送终态事件(run.completed/error)')
           state = 'failed'
           handlers.onError?.(error)
           settleError(error)
@@ -99,12 +91,6 @@ export function startAgentStream(request, handlers = {}) {
       },
       onError(error) {
         if (settled) return
-        if (state === 'cancelling') {
-          state = 'cancelled'
-          handlers.onCancelled?.()
-          settleSuccess({ cancelled: true })
-          return
-        }
         state = 'failed'
         handlers.onError?.(error)
         settleError(error)
@@ -114,7 +100,6 @@ export function startAgentStream(request, handlers = {}) {
     function cancel() {
       if (settled || state === 'cancelled' || state === 'cancelling') return
       state = 'cancelling'
-      ignoreFutureEvents = true
       streamHandle.cancel()
     }
 
